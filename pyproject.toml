@@ -1,0 +1,15 @@
+[project]
+name = "bridge-lib"
+version = "0.1.0"
+description = "A Python project with pydantic"
+requires-python = ">=3.9"
+dependencies = [
+    "pydantic>=2.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+dev-dependencies = []
