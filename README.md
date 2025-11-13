@@ -185,7 +185,3 @@ Make it executable:
 ```bash
 chmod +x /usr/local/bin/bridgecli
 ```
-
-## License
-
-[Add your license here]
