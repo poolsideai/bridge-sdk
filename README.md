@@ -113,7 +113,7 @@ def step_2(
 - `setup_script`: Script to run before step execution (optional)
 - `post_execution_script`: Script to run after step execution (optional)
 - `metadata`: Custom metadata dictionary (optional)
-- `execution_env`: Environment variables for execution (optional)
+- `execution_env`: Environment for execution such as container image (optional)
 - `depends_on`: List of step names this step depends on (optional)
 
 ### Function Annotations
