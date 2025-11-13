@@ -9,6 +9,7 @@ class Steps(Enum):
     STEP_1="Step1"
     STEP_2="Step2"
     STEP_3="Step3"
+    STEP_4="Step4"
 
 @step(
     name=Steps.STEP_1.value,
@@ -47,6 +48,19 @@ def step_2(input_data: Annotated[str, STEP_INPUT], step_1_result: Annotated[str,
     depends_on=[Steps.STEP_2.value]
 )
 def step_3(input_data: Annotated[str, STEP_INPUT], step2_result: Annotated[str, step_result(Steps.STEP_2.value)]) -> str:
+    print("This was the output of step 2:", step2_result)
+    return input_data
+
+@step(
+    name=Steps.STEP_4.value,
+    setup_script="clone_repo.sh",
+    post_execution_script="push_to_git.sh",
+    metadata={
+        "type": "agent"
+    },
+    depends_on=[Steps.STEP_2.value]
+)
+def step_4(input_data: Annotated[str, STEP_INPUT], step2_result: Annotated[str, step_result(Steps.STEP_2.value)]) -> str:
     print("This was the output of step 2:", step2_result)
     with BridgeSidecarClient() as client:
         res = client.start_agent("say hello", agent_name="agent_1003_cc_v2_rc-fp8-tpr")
