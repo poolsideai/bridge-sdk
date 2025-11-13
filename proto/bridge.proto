@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package poolside.bridge;
+
+option go_package = "github.com/poolsideai/forge/pkg/bridge/proto";
+
+// Bridge service for managing agent operations
+service BridgeService {
+  // Start an agent with a given prompt
+  rpc StartAgent (StartAgentRequest) returns (StartAgentResponse);
+}
+
+message RunDetail {
+  string agent_id = 1;
+  string session_id = 2;
+}
+
+message ContinueFrom {
+  RunDetail previous_run_detail = 1;
+
+  message NoCompactionStrategy {}
+  message CompactionStrategy {}
+  oneof compaction_strategy {
+    NoCompactionStrategy continuation = 2;
+    CompactionStrategy compaction = 3;
+  }
+}
+
+message StartAgentRequest {
+  string prompt = 1;
+  string agent_id = 2;
+}
+
+message StartAgentResponse {
+  // Unique identifier for the agent
+  RunDetail run_detail = 1;
+
+  // Result/exit status of the agent
+  string exit_result = 3;
+}

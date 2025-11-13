@@ -1,6 +1,16 @@
-from lib import step, Step
+from enum import Enum
+from typing import Annotated
+
+from lib import step, step_result, STEP_INPUT
+
+
+class Steps(Enum):
+    STEP_1="Step1"
+    STEP_2="Step2"
+    STEP_3="Step3"
 
 @step(
+    name=Steps.STEP_1.value,
     setup_script="clone_repo.sh",
     post_execution_script="push_to_git.sh",
     metadata={
@@ -8,40 +18,33 @@ from lib import step, Step
     },
     depends_on=[]
 )
-class Step1(Step[str, str]):
-    def call(self, input_data: str) -> str:
-        print(input_data)
-        return "transformed"
+def step_1(input_data: Annotated[str, STEP_INPUT]) -> str:
+    print(input_data)
+    return "transformed"
 
 
 @step(
+    name=Steps.STEP_2.value,
     setup_script="clone_repo.sh",
     post_execution_script="push_to_git.sh",
     metadata={
         "type": "agent"
     },
-    depends_on=[Step1]
+    depends_on=[Steps.STEP_1.value]
 )
-class Step2(Step[str, str]):
-    def __init__(self, step1: Step1):
-        self.step1 = step1
-
-    def call(self, input_data: str) -> str:
-        print("This was the output of step 1", self.step1.output)
-        return "transformed"
+def step_2(input_data: Annotated[str, STEP_INPUT], step_1_result: Annotated[str, step_result(Steps.STEP_1.value)]) -> int:
+        print("This was the output of step 1", step_1_result)
+        return input_data
 
 @step(
+    name=Steps.STEP_3.value,
     setup_script="clone_repo.sh",
     post_execution_script="push_to_git.sh",
     metadata={
         "type": "agent"
     },
-    depends_on=[Step2]
+    depends_on=[Steps.STEP_3.value]
 )
-class Step3(Step[str, str]):
-    def __init__(self, step2: Step2):
-        self.step2 = step2
-
-    def call(self, input_data: str) -> str:
-        print("This was the output of step 2:", self.step2.output)
-        return "transformed"
+def step_3(input_data: Annotated[str, STEP_INPUT], step2_result: Annotated[str, step_result(Steps.STEP_3.value)]) -> str:
+    print("This was the output of step 2:", step2_result)
+    return input_data

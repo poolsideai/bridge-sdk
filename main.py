@@ -8,7 +8,7 @@ from typing import Any, Dict, Type
 import json
 import inspect
 
-from lib import STEP_REGISTRY, StepData, StepRecord
+from lib import STEP_REGISTRY, StepRecord, STEP_INPUT, extract_step_result_annotation
 
 
 def discover_steps(module_path: str) -> Dict[str, StepRecord]:
@@ -47,9 +47,11 @@ def cmd_run_step(args):
         print(f"Error parsing --results JSON: {e}")
         sys.exit(1)
 
-    # 3. Instantiate the step and all dependencies
-    instantiated_steps = {}
+    # 3. Get the step function
+    step_func = steps[step_name].func
     step_metadata = steps[step_name].data
+
+    # Verify dependencies are available
     dependencies = step_metadata.depends_on or []
     missing_deps = [dep for dep in dependencies if dep not in cached_results]
     if missing_deps:
@@ -57,27 +59,9 @@ def cmd_run_step(args):
             f"Missing cached results for: {', '.join(missing_deps)}"
         )
 
-    for cached_step_name in cached_results:
-        cached_step_class = steps[cached_step_name].cls
-
-        # Get constructor signature
-        sig = inspect.signature(cached_step_class.__init__)
-        init_params = {}
-
-        # Provide None for all parameters
-        for param_name, param in sig.parameters.items():
-            if param_name == 'self':
-                continue
-            init_params[param_name] = None  # Provide None for dependencies
-
-        instance = cached_step_class(**init_params)
-        instance.set_output(cached_results[cached_step_name])
-        instantiated_steps[cached_step_class] = instance
-
-    # 4. Inject dependencies of the step by type
-    step_class = steps[step_name].cls
-    sig = inspect.signature(step_class.__init__)
-    init_params = {}
+    # 4. Inspect function signature and build arguments based on annotations
+    sig = inspect.signature(step_func)
+    call_params = {}
 
     for param_name, param in sig.parameters.items():
         if param_name == 'self':
@@ -85,16 +69,27 @@ def cmd_run_step(args):
 
         # Get the type annotation
         if param.annotation != inspect.Parameter.empty:
-            param_type = param.annotation
-            # Extract the corresponding instantiated step by type
-            init_params[param_name] = instantiated_steps[param_type]
+            # Check if it's an Annotated type
+            if hasattr(param.annotation, '__metadata__'):
+                # Extract the annotation metadata
+                metadata = param.annotation.__metadata__
+                if metadata:
+                    annotation_value = metadata[0]
+                    # Check if it's a step input
+                    if annotation_value == STEP_INPUT:
+                        call_params[param_name] = args.input
+                    # Check if it's a step result
+                    elif step_result_name := extract_step_result_annotation(annotation_value):
+                        if step_result_name in cached_results:
+                            call_params[param_name] = cached_results[step_result_name]
+                        else:
+                            raise ValueError(
+                                f"Step result '{step_result_name}' not found in cached results"
+                            )
 
-    # Instantiate the step with dependencies
-    step_instance = step_class(**init_params)
-
-    # 5. Run the execute method on the step
+    # 5. Call the step function
     try:
-        result = step_instance.execute(args.input)
+        result = step_func(**call_params)
         print(f"Step '{args.step}' executed successfully")
         print(f"Result: {result}")
     except Exception as e:
