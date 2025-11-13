@@ -7,4 +7,4 @@ sync:
 	uv sync
 
 proto:
-	python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. proto/bridge.proto
+	python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. --pyi_out=. proto/bridge_sidecar.proto

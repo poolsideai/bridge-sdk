@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from proto import bridge_pb2 as proto_dot_bridge__pb2
+from proto import bridge_sidecar_pb2 as proto_dot_bridge__sidecar__pb2
 
 GRPC_GENERATED_VERSION = '1.76.0'
 GRPC_VERSION = grpc.__version__
@@ -18,14 +18,14 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + ' but the generated code in proto/bridge_pb2_grpc.py depends on'
+        + ' but the generated code in proto/bridge_sidecar_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
     )
 
 
-class BridgeServiceStub(object):
+class BridgeSidecarServiceStub(object):
     """Bridge service for managing agent operations
     """
 
@@ -36,13 +36,13 @@ class BridgeServiceStub(object):
             channel: A grpc.Channel.
         """
         self.StartAgent = channel.unary_unary(
-                '/poolside.bridge.BridgeService/StartAgent',
-                request_serializer=proto_dot_bridge__pb2.StartAgentRequest.SerializeToString,
-                response_deserializer=proto_dot_bridge__pb2.StartAgentResponse.FromString,
+                '/poolside.bridge.BridgeSidecarService/StartAgent',
+                request_serializer=proto_dot_bridge__sidecar__pb2.StartAgentRequest.SerializeToString,
+                response_deserializer=proto_dot_bridge__sidecar__pb2.StartAgentResponse.FromString,
                 _registered_method=True)
 
 
-class BridgeServiceServicer(object):
+class BridgeSidecarServiceServicer(object):
     """Bridge service for managing agent operations
     """
 
@@ -54,22 +54,22 @@ class BridgeServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
 
-def add_BridgeServiceServicer_to_server(servicer, server):
+def add_BridgeSidecarServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'StartAgent': grpc.unary_unary_rpc_method_handler(
                     servicer.StartAgent,
-                    request_deserializer=proto_dot_bridge__pb2.StartAgentRequest.FromString,
-                    response_serializer=proto_dot_bridge__pb2.StartAgentResponse.SerializeToString,
+                    request_deserializer=proto_dot_bridge__sidecar__pb2.StartAgentRequest.FromString,
+                    response_serializer=proto_dot_bridge__sidecar__pb2.StartAgentResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'poolside.bridge.BridgeService', rpc_method_handlers)
+            'poolside.bridge.BridgeSidecarService', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('poolside.bridge.BridgeService', rpc_method_handlers)
+    server.add_registered_method_handlers('poolside.bridge.BridgeSidecarService', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
-class BridgeService(object):
+class BridgeSidecarService(object):
     """Bridge service for managing agent operations
     """
 
@@ -87,9 +87,9 @@ class BridgeService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/poolside.bridge.BridgeService/StartAgent',
-            proto_dot_bridge__pb2.StartAgentRequest.SerializeToString,
-            proto_dot_bridge__pb2.StartAgentResponse.FromString,
+            '/poolside.bridge.BridgeSidecarService/StartAgent',
+            proto_dot_bridge__sidecar__pb2.StartAgentRequest.SerializeToString,
+            proto_dot_bridge__sidecar__pb2.StartAgentResponse.FromString,
             options,
             channel_credentials,
             insecure,

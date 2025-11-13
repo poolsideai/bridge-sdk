@@ -2,6 +2,7 @@ from enum import Enum
 from typing import Annotated
 
 from lib import step, step_result, STEP_INPUT
+from lib.bridge_sidecar_client import BridgeSidecarClient
 
 
 class Steps(Enum):
@@ -32,7 +33,7 @@ def step_1(input_data: Annotated[str, STEP_INPUT]) -> str:
     },
     depends_on=[Steps.STEP_1.value]
 )
-def step_2(input_data: Annotated[str, STEP_INPUT], step_1_result: Annotated[str, step_result(Steps.STEP_1.value)]) -> int:
+def step_2(input_data: Annotated[str, STEP_INPUT], step_1_result: Annotated[str, step_result(Steps.STEP_1.value)]) -> str:
         print("This was the output of step 1", step_1_result)
         return input_data
 
@@ -43,8 +44,11 @@ def step_2(input_data: Annotated[str, STEP_INPUT], step_1_result: Annotated[str,
     metadata={
         "type": "agent"
     },
-    depends_on=[Steps.STEP_3.value]
+    depends_on=[Steps.STEP_2.value]
 )
-def step_3(input_data: Annotated[str, STEP_INPUT], step2_result: Annotated[str, step_result(Steps.STEP_3.value)]) -> str:
+def step_3(input_data: Annotated[str, STEP_INPUT], step2_result: Annotated[str, step_result(Steps.STEP_2.value)]) -> str:
     print("This was the output of step 2:", step2_result)
+    with BridgeSidecarClient() as client:
+        res = client.start_agent("say hello", agent_name="agent_1003_cc_v2_rc-fp8-tpr")
+        print(res)
     return input_data

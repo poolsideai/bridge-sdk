@@ -5,13 +5,13 @@ package poolside.bridge;
 option go_package = "github.com/poolsideai/forge/pkg/bridge/proto";
 
 // Bridge service for managing agent operations
-service BridgeService {
+service BridgeSidecarService {
   // Start an agent with a given prompt
   rpc StartAgent (StartAgentRequest) returns (StartAgentResponse);
 }
 
 message RunDetail {
-  string agent_id = 1;
+  string agent_name = 1;
   string session_id = 2;
 }
 
@@ -28,7 +28,9 @@ message ContinueFrom {
 
 message StartAgentRequest {
   string prompt = 1;
-  string agent_id = 2;
+  string agent_name = 2;
+  string directory = 3;
+  ContinueFrom continue_from = 4;
 }
 
 message StartAgentResponse {
