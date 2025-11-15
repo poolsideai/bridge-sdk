@@ -4,10 +4,11 @@
 import argparse
 import importlib
 import sys
-from typing import Any, Dict, Type
+from typing import Any, Dict, Type, get_args
 import json
 import inspect
 
+from pydantic import BaseModel
 from lib import STEP_REGISTRY, StepRecord, STEP_INPUT, extract_step_result_annotation
 
 
@@ -67,25 +68,40 @@ def cmd_run_step(args):
         if param_name == 'self':
             continue
 
-        # Get the type annotation
-        if param.annotation != inspect.Parameter.empty:
-            # Check if it's an Annotated type
-            if hasattr(param.annotation, '__metadata__'):
-                # Extract the annotation metadata
-                metadata = param.annotation.__metadata__
-                if metadata:
-                    annotation_value = metadata[0]
-                    # Check if it's a step input
-                    if annotation_value == STEP_INPUT:
-                        call_params[param_name] = args.input
-                    # Check if it's a step result
-                    elif step_result_name := extract_step_result_annotation(annotation_value):
-                        if step_result_name in cached_results:
-                            call_params[param_name] = cached_results[step_result_name]
-                        else:
-                            raise ValueError(
-                                f"Step result '{step_result_name}' not found in cached results"
-                            )
+        # Check if it's an Annotated type
+        if (
+            param.annotation != inspect.Parameter.empty
+            and hasattr(param.annotation, '__metadata__')
+            and (metadata := param.annotation.__metadata__)
+        ):
+            annotation_value = metadata[0]
+
+            # Check if it's a step input
+            if annotation_value == STEP_INPUT:
+                if type_args := get_args(param.annotation):
+                    actual_type = type_args[0]
+                    # Check if it's a Pydantic model
+                    call_params[param_name] = resolve_step_input(args.input, actual_type)
+                else:
+                    # No type args, pass as-is
+                    call_params[param_name] = args.input
+
+            # Check if it's a step result
+            elif step_result_name := extract_step_result_annotation(annotation_value):
+                if step_result_name in cached_results:
+                    cached_value = cached_results[step_result_name]
+                    # Get the actual type from Annotated[Type, metadata]
+                    if type_args := get_args(param.annotation):
+                        actual_type = type_args[0]
+                        # Check if it's a Pydantic model
+                        call_params[param_name] = resolve_step_input(cached_value, actual_type)
+                    else:
+                        # No type args, pass as-is
+                        call_params[param_name] = cached_value
+                else:
+                    raise ValueError(
+                        f"Step result '{step_result_name}' not found in cached results"
+                    )
 
     # 5. Call the step function
     try:
@@ -97,6 +113,20 @@ def cmd_run_step(args):
         import traceback
         traceback.print_exc()
         sys.exit(1)
+
+def resolve_step_input(cached_value: Any, actual_type: Any) -> Any:
+    """If the value is a pydantic model, we attempt to deserialize/validate, otherwise we pass the input as is"""
+    if isinstance(actual_type, type) and issubclass(actual_type, BaseModel):
+        # Deserialize to Pydantic model
+        if isinstance(cached_value, dict):
+            return actual_type(**cached_value)
+        elif isinstance(cached_value, str):
+            return actual_type.model_validate_json(cached_value)
+        else:
+            return cached_value
+    else:
+        # Pass as-is
+        return cached_value
 
 
 def main():

@@ -121,6 +121,90 @@ def step_2(
 - `Annotated[type, STEP_INPUT]`: Marks a parameter as the step input
 - `Annotated[type, step_result(step_name)]`: Injects the result from a previous step
 
+## Calling Agents
+
+The Bridge Library supports calling agents through the `BridgeSidecarClient`. To use agents, you need to have both the **sidecar** and **core API** running.
+
+### Prerequisites
+
+Make sure both services are running before calling agents:
+- **Sidecar**: The Bridge sidecar service must be active
+- **Core API**: The agent API service must be running
+
+### Using Pydantic Types
+
+You can use Pydantic `BaseModel` classes for both inputs and outputs, enabling type-safe data validation and structured results. This is particularly useful when chaining agents together or when you need to pass complex data structures between steps.
+
+### Example: Agent with Pydantic Types
+
+Here's a complete example (from `examples/agent_example.py`) showing how to call agents and use Pydantic models:
+
+```python
+from enum import Enum
+from typing import Annotated, Optional
+from pydantic import BaseModel
+
+from lib import step, step_result, STEP_INPUT
+from lib.bridge_sidecar_client import BridgeSidecarClient
+from proto.bridge_sidecar_pb2 import ContinueFrom, RunDetail
+
+class AgentSteps(Enum):
+    HELLO_WORLD_AGENT = "HelloWorld"
+    CONTINUATION_AGENT = "Continuation"
+
+# Define a Pydantic model for the agent result
+class HelloWorldResult(BaseModel):
+    session_id: str
+    res: str
+
+@step(
+    name=AgentSteps.HELLO_WORLD_AGENT.value,
+    metadata={"type": "agent"},
+    depends_on=[]
+)
+def hello_world_agent() -> HelloWorldResult:
+    with BridgeSidecarClient() as client:
+        _, session_id, res = client.start_agent(
+            "say hello",
+            agent_name="agent_1003_cc_v2_rc-fp8-tpr"
+        )
+        return HelloWorldResult(session_id=session_id, res=res)
+
+# Define a Pydantic model for the continuation input
+class ContinuationInput(BaseModel):
+    prompt: str
+
+@step(
+    name=AgentSteps.CONTINUATION_AGENT.value,
+    metadata={"type": "agent"},
+    depends_on=[AgentSteps.HELLO_WORLD_AGENT.value]
+)
+def continuation_agent(
+    input: Annotated[ContinuationInput, STEP_INPUT],
+    prev_result: Annotated[HelloWorldResult, step_result(AgentSteps.HELLO_WORLD_AGENT.value)]
+) -> Optional[str]:
+    with BridgeSidecarClient() as client:
+        _, session_id, res = client.start_agent(
+            "tell me what was done previously",
+            agent_name="agent_1003_cc_v2_rc-fp8-tpr",
+            continue_from=ContinueFrom(
+                previous_run_detail=RunDetail(
+                    agent_name="agent_1003_cc_v2_rc-fp8-tpr",
+                    session_id=prev_result.session_id
+                ),
+                continuation=ContinueFrom.NoCompactionStrategy()
+            )
+        )
+        return session_id
+```
+
+### Key Features
+
+- **Pydantic Models**: Use `BaseModel` for type-safe inputs and outputs
+- **Session Management**: Access `session_id` from previous agent runs for continuations
+- **Agent Chaining**: Pass results from one agent to another using `step_result()`
+- **Context Manager**: Use `BridgeSidecarClient()` as a context manager for automatic cleanup
+
 ## Project Structure
 
 ```
