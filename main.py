@@ -6,7 +6,7 @@ import importlib
 import sys
 import os
 from pathlib import Path
-from typing import Dict, List, Optional, get_args
+from typing import Any, Dict, List, Optional, get_args, get_origin, Annotated
 import json
 import inspect
 
@@ -118,6 +118,76 @@ def discover_steps(
     return STEP_REGISTRY
 
 
+def extract_type_info(annotation):
+    """Extract type information, handling Pydantic models specially."""
+    if annotation == inspect.Parameter.empty:
+        return None
+
+    # Handle Annotated types
+    origin = get_origin(annotation)
+    if origin is Annotated:
+        args = get_args(annotation)
+        if args:
+            # Get the actual type (first argument)
+            actual_type = args[0]
+            return extract_type_info(actual_type)
+
+    # Check if it's a Pydantic BaseModel
+    if hasattr(annotation, "__pydantic_core_schema__") or (
+        inspect.isclass(annotation) and hasattr(annotation, "model_json_schema")
+    ):
+        try:
+            # Get the Pydantic model schema
+            schema = annotation.model_json_schema()
+            return {"type": "pydantic", "model": annotation.__name__, "schema": schema}
+        except Exception:
+            pass
+
+    # For other types, return string representation
+    if inspect.isclass(annotation):
+        return {"type": "class", "name": annotation.__name__}
+    else:
+        # Try to get a string representation
+        type_str = str(annotation)
+        # Clean up common type hints
+        type_str = type_str.replace("typing.", "").replace("builtins.", "")
+        return {"type": "builtin", "name": type_str}
+
+
+def extract_step_signature(step_func):
+    """Extract input and output type information from step function signature."""
+    sig = inspect.signature(step_func)
+    input_type = None
+    output_type = None
+
+    # Find the input parameter (annotated with STEP_INPUT)
+    for param_name, param in sig.parameters.items():
+        if param_name == "self":
+            continue
+
+        annotation = param.annotation
+        if annotation != inspect.Parameter.empty:
+            # Check if it's an Annotated type with STEP_INPUT
+            # Use the same approach as cmd_run_step
+            if hasattr(annotation, "__metadata__") and (
+                metadata := annotation.__metadata__
+            ):
+                annotation_value = metadata[0]
+                if annotation_value == STEP_INPUT:
+                    # Extract the actual type from Annotated[Type, STEP_INPUT]
+                    if type_args := get_args(annotation):
+                        actual_type = type_args[0]
+                        input_type = extract_type_info(actual_type)
+                        break
+
+    # Extract return type
+    return_annotation = sig.return_annotation
+    if return_annotation != inspect.Signature.empty:
+        output_type = extract_type_info(return_annotation)
+
+    return {"input_type": input_type, "output_type": output_type}
+
+
 def cmd_config_get_dsl(args):
     """Handle 'config get-dsl' command."""
     if args.module:
@@ -128,11 +198,20 @@ def cmd_config_get_dsl(args):
         base_path = args.base_path or os.environ.get("CLONE_DIR", os.getcwd())
         discover_steps(base_path=base_path)
 
-    # Convert StepData Pydantic models to dicts for JSON serialization
-    dsl_output = {
-        step_name: data.data.model_dump(exclude_none=True)
-        for step_name, data in STEP_REGISTRY.items()
-    }
+    # Convert StepData Pydantic models to dicts and add type information
+    dsl_output = {}
+    for step_name, data in STEP_REGISTRY.items():
+        step_dict = data.data.model_dump(exclude_none=True)
+
+        # Extract input/output type information from function signature
+        type_info = extract_step_signature(data.func)
+        if type_info["input_type"]:
+            step_dict["input_type"] = type_info["input_type"]
+        if type_info["output_type"]:
+            step_dict["output_type"] = type_info["output_type"]
+
+        dsl_output[step_name] = step_dict
+
     print(json.dumps(dsl_output, indent=2))
 
 

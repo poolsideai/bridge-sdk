@@ -88,13 +88,17 @@ else
     echo "No pyproject.toml found, skipping dependency installation" >&2
 fi
 
-# Add both the bridge-sdk (/app) and cloned repo to Python path
-# /app must be first so the bridge-sdk's lib module can be imported by cloned repo code
-# /tmp/repo must be included so we can import the module from the cloned repo
-# Add venv site-packages if it exists so dependencies are available
+# Set up Python path
+# The cloned repo should have all necessary dependencies (including bridge-sdk dependencies like pydantic)
+# We only need:
+# 1. /app - bridge-sdk source code (lib module) - must be first so 'from lib import step' works
+# 2. Cloned repo venv (if exists) - contains all dependencies needed by both bridge-sdk and cloned repo
+# 3. /tmp/repo - cloned repo source code
 if [ -n "$VENV_SITE_PACKAGES" ]; then
-    export PYTHONPATH="/app:$CLONE_DIR:$VENV_SITE_PACKAGES:$PYTHONPATH"
+    # Cloned repo has venv with dependencies - use it
+    export PYTHONPATH="/app:$VENV_SITE_PACKAGES:$CLONE_DIR:$PYTHONPATH"
 else
+    # No venv - rely on system Python (cloned repo should have deps installed system-wide or in its own way)
     export PYTHONPATH="/app:$CLONE_DIR:$PYTHONPATH"
 fi
 
