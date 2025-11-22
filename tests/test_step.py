@@ -1,12 +1,27 @@
 """Tests for the step decorator functionality."""
 
 import pytest
-import importlib
 from pathlib import Path
-from typing import Annotated
 from pydantic import BaseModel
 
-from lib import step, STEP_REGISTRY, StepData, STEP_INPUT, step_result
+from lib import step, STEP_REGISTRY, StepData, get_dsl_output
+
+
+# Test Pydantic models
+class TestInput(BaseModel):
+    value: str
+
+
+class TestOutput(BaseModel):
+    result: str
+
+
+class TestIntInput(BaseModel):
+    value: int
+
+
+class TestBoolInput(BaseModel):
+    value: bool
 
 
 def test_step_decorator_basic():
@@ -14,15 +29,15 @@ def test_step_decorator_basic():
     # Clear registry to start fresh
     STEP_REGISTRY.clear()
 
-    @step(name="test_step")
+    @step(name_override="test_step")
     def test_function():
         return "test"
 
     assert "test_step" in STEP_REGISTRY
-    # The func stored in StepRecord is the original function, not the wrapper
-    step_record = STEP_REGISTRY["test_step"]
-    assert callable(step_record.func)
-    assert isinstance(step_record.data, StepData)
+    # STEP_REGISTRY now stores StepData directly
+    step_data = STEP_REGISTRY["test_step"]
+    assert isinstance(step_data, StepData)
+    assert step_data.name == "test_step"
 
 
 def test_step_data_file_path_and_line_number():
@@ -30,12 +45,11 @@ def test_step_data_file_path_and_line_number():
     STEP_REGISTRY.clear()
 
     # Define a step function
-    @step(name="test_file_location")
+    @step(name_override="test_file_location")
     def test_func():
         return "test"
 
-    step_record = STEP_REGISTRY["test_file_location"]
-    step_data = step_record.data
+    step_data = STEP_REGISTRY["test_file_location"]
 
     # Verify file_path is set
     assert step_data.file_path is not None
@@ -58,24 +72,24 @@ def test_step_data_all_fields():
     STEP_REGISTRY.clear()
 
     @step(
-        name="complete_step",
+        name_override="complete_step",
         setup_script="setup.sh",
         post_execution_script="cleanup.sh",
         metadata={"type": "test"},
-        execution_env={"image": "test:latest"},
-        depends_on=["step1", "step2"],
+        sandbox_id="test-sandbox",
+        depends_on_steps=["step1", "step2"],
     )
     def complete_test_func():
         return "complete"
 
-    step_data = STEP_REGISTRY["complete_step"].data
+    step_data = STEP_REGISTRY["complete_step"]
 
     assert step_data.name == "complete_step"
     assert step_data.setup_script == "setup.sh"
     assert step_data.post_execution_script == "cleanup.sh"
     assert step_data.metadata == {"type": "test"}
-    assert step_data.execution_env == {"image": "test:latest"}
-    assert step_data.depends_on == ["step1", "step2"]
+    assert step_data.sandbox_id == "test-sandbox"
+    assert step_data.depends_on_steps == ["step1", "step2"]
     assert step_data.file_path is not None
     assert step_data.line_number is not None
 
@@ -86,37 +100,37 @@ def test_examples_file_path_and_line_number():
     import examples.example  # noqa: F401
 
     # Check that steps from example.py have correct file paths
-    from examples.example import Steps
-
-    step_1_record = STEP_REGISTRY.get(Steps.STEP_1.value)
-    if step_1_record:
-        assert step_1_record.data.file_path is not None
+    # step_1 has no name_override, so it's registered as "step_1"
+    step_1_data = STEP_REGISTRY.get("step_1")
+    if step_1_data:
+        assert step_1_data.file_path is not None
         # Should be a relative path
-        assert not Path(step_1_record.data.file_path).is_absolute()
+        assert not Path(step_1_data.file_path).is_absolute()
         # Should point to example.py relative to repo root
-        assert step_1_record.data.file_path == "examples/example.py"
-        assert step_1_record.data.line_number is not None
-        # Line number should be around line 14-23 (decorator starts at 14, function at 23)
-        assert step_1_record.data.line_number >= 10
-        assert step_1_record.data.line_number <= 30
+        assert step_1_data.file_path == "examples/example.py"
+        assert step_1_data.line_number is not None
+        # Line number should be around line 18-23 (decorator starts at 18, function at 23)
+        assert step_1_data.line_number >= 15
+        assert step_1_data.line_number <= 30
 
-    step_2_record = STEP_REGISTRY.get(Steps.STEP_2.value)
-    if step_2_record:
-        assert step_2_record.data.file_path is not None
+    # step_2 has name_override="step_2_override", so it's registered as "step_2_override"
+    step_2_data = STEP_REGISTRY.get("step_2_override")
+    if step_2_data:
+        assert step_2_data.file_path is not None
         # Should be a relative path
-        assert not Path(step_2_record.data.file_path).is_absolute()
-        assert step_2_record.data.file_path == "examples/example.py"
-        assert step_2_record.data.line_number is not None
-        # step_2 decorator starts at 28, function at 37
-        assert step_2_record.data.line_number >= 25
-        assert step_2_record.data.line_number <= 45
+        assert not Path(step_2_data.file_path).is_absolute()
+        assert step_2_data.file_path == "examples/example.py"
+        assert step_2_data.line_number is not None
+        # step_2 decorator starts at 36, function at 44
+        assert step_2_data.line_number >= 30
+        assert step_2_data.line_number <= 50
 
 
 def test_multiple_steps_different_locations():
     """Test that different steps have different line numbers."""
     STEP_REGISTRY.clear()
 
-    @step(name="step_a")
+    @step(name_override="step_a")
     def step_a():
         return "a"
 
@@ -125,12 +139,12 @@ def test_multiple_steps_different_locations():
     _ = None
     _ = None
 
-    @step(name="step_b")
+    @step(name_override="step_b")
     def step_b():
         return "b"
 
-    step_a_data = STEP_REGISTRY["step_a"].data
-    step_b_data = STEP_REGISTRY["step_b"].data
+    step_a_data = STEP_REGISTRY["step_a"]
+    step_b_data = STEP_REGISTRY["step_b"]
 
     # Both should have file paths
     assert step_a_data.file_path is not None
@@ -162,250 +176,192 @@ def test_step_without_name():
     # This tests that the decorator doesn't crash
 
 
-def test_parameter_extraction_no_parameters():
-    """Test parameter extraction for a step with no parameters."""
+def test_params_json_schema_no_parameters():
+    """Test params_json_schema for a step with no parameters."""
     STEP_REGISTRY.clear()
 
-    @step(name="no_params_step")
+    @step(name_override="no_params_step")
     def no_params():
         return "test"
 
-    step_data = STEP_REGISTRY["no_params_step"].data
-    assert step_data.parameters is not None
-    assert len(step_data.parameters) == 0
+    step_data = STEP_REGISTRY["no_params_step"]
+    assert step_data.params_json_schema is not None
+    assert isinstance(step_data.params_json_schema, dict)
+    # Should have properties (even if empty)
+    assert "properties" in step_data.params_json_schema
+    assert len(step_data.params_json_schema["properties"]) == 0
 
 
-def test_parameter_extraction_step_input():
-    """Test parameter extraction for a step with STEP_INPUT parameter."""
+def test_params_json_schema_with_parameters():
+    """Test params_json_schema for a step with parameters."""
     STEP_REGISTRY.clear()
 
-    @step(name="input_step")
-    def input_step(input_data: Annotated[str, STEP_INPUT]):
-        return input_data
+    @step(name_override="params_step")
+    def params_step(x: int, y: str = "default"):
+        return f"{x}:{y}"
 
-    step_data = STEP_REGISTRY["input_step"].data
-    assert step_data.parameters is not None
-    assert len(step_data.parameters) == 1
+    step_data = STEP_REGISTRY["params_step"]
+    assert step_data.params_json_schema is not None
+    assert isinstance(step_data.params_json_schema, dict)
+    assert "properties" in step_data.params_json_schema
+    # Should have x and y in properties
+    assert "x" in step_data.params_json_schema["properties"]
+    assert "y" in step_data.params_json_schema["properties"]
+    # x should be required, y should have a default
+    assert "x" in step_data.params_json_schema.get("required", [])
 
-    param = step_data.parameters[0]
-    assert param.name == "input_data"
-    assert param.is_step_input is True
-    assert param.is_step_result is False
-    assert param.step_result_name is None
-    assert param.actual_type is str
 
-
-def test_parameter_extraction_step_input_no_type():
-    """Test parameter extraction for STEP_INPUT without type annotation."""
+def test_return_json_schema():
+    """Test return_json_schema for a step with return type."""
     STEP_REGISTRY.clear()
 
-    @step(name="input_step_no_type")
-    def input_step_no_type(input_data: Annotated[None, STEP_INPUT]):
-        return input_data
+    @step(name_override="return_step")
+    def return_step() -> TestOutput:
+        return TestOutput(result="test")
 
-    step_data = STEP_REGISTRY["input_step_no_type"].data
-    assert step_data.parameters is not None
-    assert len(step_data.parameters) == 1
+    step_data = STEP_REGISTRY["return_step"]
+    assert step_data.return_json_schema is not None
+    assert isinstance(step_data.return_json_schema, dict)
+    # Should have schema information for TestOutput
+    # JSON schema can have "type", "properties", or "$ref" for references
+    assert (
+        "type" in step_data.return_json_schema
+        or "properties" in step_data.return_json_schema
+        or "$ref" in step_data.return_json_schema
+    )
 
-    param = step_data.parameters[0]
-    assert param.name == "input_data"
-    assert param.is_step_input is True
-    assert param.actual_type is None
 
-
-def test_parameter_extraction_step_result():
-    """Test parameter extraction for a step with step_result parameter."""
+def test_return_json_schema_no_return_type():
+    """Test return_json_schema for a step without return type annotation."""
     STEP_REGISTRY.clear()
 
-    @step(name="result_step")
-    def result_step(prev_result: Annotated[str, step_result("previous_step")]):
-        return prev_result
+    @step(name_override="no_return_step")
+    def no_return_step():
+        return "test"
 
-    step_data = STEP_REGISTRY["result_step"].data
-    assert step_data.parameters is not None
-    assert len(step_data.parameters) == 1
-
-    param = step_data.parameters[0]
-    assert param.name == "prev_result"
-    assert param.is_step_input is False
-    assert param.is_step_result is True
-    assert param.step_result_name == "previous_step"
-    assert param.actual_type is str
+    step_data = STEP_REGISTRY["no_return_step"]
+    # Should still have return_json_schema (may be empty dict or Any schema)
+    assert step_data.return_json_schema is not None
+    assert isinstance(step_data.return_json_schema, dict)
 
 
-def test_parameter_extraction_step_result_no_type():
-    """Test parameter extraction for step_result without type annotation."""
+def test_params_json_schema_with_pydantic_input():
+    """Test params_json_schema with Pydantic model input."""
     STEP_REGISTRY.clear()
 
-    @step(name="result_step_no_type")
-    def result_step_no_type(prev_result: Annotated[None, step_result("previous_step")]):
-        return prev_result
+    @step(name_override="pydantic_input_step")
+    def pydantic_input_step(input_data: TestInput) -> TestOutput:
+        return TestOutput(result=input_data.value)
 
-    step_data = STEP_REGISTRY["result_step_no_type"].data
-    assert step_data.parameters is not None
-    assert len(step_data.parameters) == 1
-
-    param = step_data.parameters[0]
-    assert param.name == "prev_result"
-    assert param.is_step_result is True
-    assert param.step_result_name == "previous_step"
-    assert param.actual_type is None
+    step_data = STEP_REGISTRY["pydantic_input_step"]
+    assert step_data.params_json_schema is not None
+    assert "properties" in step_data.params_json_schema
+    assert "input_data" in step_data.params_json_schema["properties"]
 
 
-def test_parameter_extraction_both_input_and_result():
-    """Test parameter extraction for a step with both STEP_INPUT and step_result."""
+def test_get_dsl_output_json_serializable():
+    """Test that get_dsl_output returns JSON-serializable data."""
     STEP_REGISTRY.clear()
 
-    @step(name="both_params_step")
-    def both_params(
-        input_data: Annotated[str, STEP_INPUT],
-        prev_result: Annotated[str, step_result("previous_step")],
-    ):
-        return f"{input_data}:{prev_result}"
+    @step(name_override="test_json_step")
+    def test_step(input_data: TestInput) -> TestOutput:
+        return TestOutput(result=input_data.value)
 
-    step_data = STEP_REGISTRY["both_params_step"].data
-    assert step_data.parameters is not None
-    assert len(step_data.parameters) == 2
+    # Get DSL output
+    dsl_output = get_dsl_output()
 
-    input_param = step_data.parameters[0]
-    assert input_param.name == "input_data"
-    assert input_param.is_step_input is True
-    assert input_param.is_step_result is False
-    assert input_param.actual_type is str
+    # Verify it's JSON serializable (this should not raise an exception)
+    import json
 
-    result_param = step_data.parameters[1]
-    assert result_param.name == "prev_result"
-    assert result_param.is_step_input is False
-    assert result_param.is_step_result is True
-    assert result_param.step_result_name == "previous_step"
-    assert result_param.actual_type is str
+    json.dumps(dsl_output, indent=2)
+
+    # Verify the structure
+    assert "test_json_step" in dsl_output
+    step_data = dsl_output["test_json_step"]
+    assert "params_json_schema" in step_data
+    assert "return_json_schema" in step_data
 
 
-def test_parameter_extraction_regular_parameter():
-    """Test parameter extraction for a step with regular (non-annotated) parameters."""
+def test_get_dsl_output_with_pydantic_model():
+    """Test that get_dsl_output handles Pydantic models correctly."""
     STEP_REGISTRY.clear()
 
-    @step(name="regular_param_step")
-    def regular_param(regular_arg: str):
-        return regular_arg
-
-    step_data = STEP_REGISTRY["regular_param_step"].data
-    assert step_data.parameters is not None
-    assert len(step_data.parameters) == 1
-
-    param = step_data.parameters[0]
-    assert param.name == "regular_arg"
-    assert param.is_step_input is False
-    assert param.is_step_result is False
-    assert param.step_result_name is None
-    # Regular parameters without annotations won't have actual_type extracted
-    assert param.actual_type is None
-
-
-def test_parameter_extraction_pydantic_model():
-    """Test parameter extraction with Pydantic model types."""
-    STEP_REGISTRY.clear()
-
-    class InputModel(BaseModel):
+    class TestInput(BaseModel):
         value: str
 
-    class ResultModel(BaseModel):
-        data: int
+    class TestOutput(BaseModel):
+        result: str
 
-    @step(name="pydantic_step")
-    def pydantic_step(
-        input_data: Annotated[InputModel, STEP_INPUT],
-        prev_result: Annotated[ResultModel, step_result("previous_step")],
-    ):
-        return input_data.value
+    @step(name_override="test_pydantic_step")
+    def test_step(input_data: TestInput) -> TestOutput:
+        return TestOutput(result=input_data.value)
 
-    step_data = STEP_REGISTRY["pydantic_step"].data
-    assert step_data.parameters is not None
-    assert len(step_data.parameters) == 2
+    # Get DSL output
+    dsl_output = get_dsl_output()
 
-    input_param = step_data.parameters[0]
-    assert input_param.name == "input_data"
-    assert input_param.is_step_input is True
-    assert input_param.actual_type == InputModel
+    # Verify it's JSON serializable (this should not raise an exception)
+    import json
 
-    result_param = step_data.parameters[1]
-    assert result_param.name == "prev_result"
-    assert result_param.is_step_result is True
-    assert result_param.actual_type == ResultModel
+    json.dumps(dsl_output, indent=2)
+
+    # Verify Pydantic model is properly serialized
+    step_data = dsl_output["test_pydantic_step"]
+    assert "params_json_schema" in step_data
+    assert "return_json_schema" in step_data
+    # Check that schemas contain proper structure
+    assert isinstance(step_data["params_json_schema"], dict)
+    assert isinstance(step_data["return_json_schema"], dict)
 
 
-def test_parameter_extraction_skips_self():
-    """Test that 'self' parameter is skipped in parameter extraction."""
+def test_params_from_step_results():
+    """Test that params_from_step_results is properly set."""
     STEP_REGISTRY.clear()
 
-    class StepClass:
-        @step(name="method_step")
-        def method_step(self, input_data: Annotated[str, STEP_INPUT]):
-            return input_data
+    @step(
+        name_override="step_with_deps",
+        params_from_step_results={"prev_result": "previous_step"},
+    )
+    def step_with_deps(prev_result: TestOutput) -> TestOutput:
+        return prev_result
 
-    step_data = STEP_REGISTRY["method_step"].data
-    assert step_data.parameters is not None
-    # Should only have input_data, not self
-    assert len(step_data.parameters) == 1
-    assert step_data.parameters[0].name == "input_data"
-    assert "self" not in [p.name for p in step_data.parameters]
+    step_data = STEP_REGISTRY["step_with_deps"]
+    assert step_data.params_from_step_results is not None
+    assert isinstance(step_data.params_from_step_results, dict)
+    assert step_data.params_from_step_results["prev_result"] == "previous_step"
 
 
-def test_parameter_extraction_multiple_step_results():
-    """Test parameter extraction with multiple step result parameters."""
+def test_optional_return_type():
+    """Test return_json_schema with Optional return type."""
     STEP_REGISTRY.clear()
+    from typing import Optional
 
-    @step(name="multi_result_step")
-    def multi_result(
-        result1: Annotated[str, step_result("step1")],
-        result2: Annotated[int, step_result("step2")],
-        result3: Annotated[bool, step_result("step3")],
-    ):
-        return f"{result1}:{result2}:{result3}"
+    @step(name_override="optional_return_step")
+    def optional_return_step() -> Optional[TestOutput]:
+        return TestOutput(result="test")
 
-    step_data = STEP_REGISTRY["multi_result_step"].data
-    assert step_data.parameters is not None
-    assert len(step_data.parameters) == 3
-
-    assert step_data.parameters[0].name == "result1"
-    assert step_data.parameters[0].step_result_name == "step1"
-    assert step_data.parameters[0].actual_type is str
-
-    assert step_data.parameters[1].name == "result2"
-    assert step_data.parameters[1].step_result_name == "step2"
-    assert step_data.parameters[1].actual_type is int
-
-    assert step_data.parameters[2].name == "result3"
-    assert step_data.parameters[2].step_result_name == "step3"
-    assert step_data.parameters[2].actual_type is bool
+    step_data = STEP_REGISTRY["optional_return_step"]
+    assert step_data.return_json_schema is not None
+    assert isinstance(step_data.return_json_schema, dict)
 
 
-def test_parameter_extraction_examples():
-    """Test parameter extraction with actual examples from example.py."""
-    # Reload the module to ensure decorators run and register steps
-    import examples.example  # noqa: F401
+def test_union_return_type():
+    """Test return_json_schema with Union return type."""
+    STEP_REGISTRY.clear()
+    from typing import Union
 
-    importlib.reload(examples.example)
+    class Model1(BaseModel):
+        value: str
 
-    from examples.example import Steps
+    class Model2(BaseModel):
+        value: int
 
-    # Test step_1 which has only STEP_INPUT
-    step_1_data = STEP_REGISTRY[Steps.STEP_1.value].data
-    assert step_1_data.parameters is not None
-    assert len(step_1_data.parameters) == 1
-    assert step_1_data.parameters[0].name == "input_data"
-    assert step_1_data.parameters[0].is_step_input is True
-    assert step_1_data.parameters[0].actual_type is str
+    @step(name_override="union_return_step")
+    def union_return_step() -> Union[Model1, Model2]:
+        return Model1(value="test")
 
-    # Test step_2 which has both STEP_INPUT and step_result
-    step_2_data = STEP_REGISTRY[Steps.STEP_2.value].data
-    assert step_2_data.parameters is not None
-    assert len(step_2_data.parameters) == 2
-    assert step_2_data.parameters[0].name == "input_data"
-    assert step_2_data.parameters[0].is_step_input is True
-    assert step_2_data.parameters[1].name == "step_1_result"
-    assert step_2_data.parameters[1].is_step_result is True
-    assert step_2_data.parameters[1].step_result_name == Steps.STEP_1.value
+    step_data = STEP_REGISTRY["union_return_step"]
+    assert step_data.return_json_schema is not None
+    assert isinstance(step_data.return_json_schema, dict)
 
 
 if __name__ == "__main__":

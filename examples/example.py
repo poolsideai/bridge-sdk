@@ -1,68 +1,97 @@
 from enum import Enum
 from typing import Annotated
 
-from lib import step, step_result, STEP_INPUT
+from lib import step, step_result
 from lib.bridge_sidecar_client import BridgeSidecarClient
+from pydantic import BaseModel
 
 
-class Steps(Enum):
-    STEP_1="Step1"
-    STEP_2="Step2"
-    STEP_3="Step3"
-    STEP_4="Step4"
+# Pydantic models for step inputs and outputs
+class Step1Input(BaseModel):
+    value: str
 
-@step(
-    name=Steps.STEP_1.value,
-    setup_script="clone_repo.sh",
-    post_execution_script="push_to_git.sh",
-    metadata={
-        "type": "agent"
-    },
-    depends_on=[]
-)
-def step_1(input_data: Annotated[str, STEP_INPUT]) -> str:
-    print(input_data)
-    return "transformed"
+
+class Step1Output(BaseModel):
+    result: str
 
 
 @step(
-    name=Steps.STEP_2.value,
     setup_script="clone_repo.sh",
     post_execution_script="push_to_git.sh",
-    metadata={
-        "type": "agent"
-    },
-    depends_on=[Steps.STEP_1.value]
+    metadata={"type": "agent"},
 )
-def step_2(input_data: Annotated[str, STEP_INPUT], step_1_result: Annotated[str, step_result(Steps.STEP_1.value)]) -> str:
-        print("This was the output of step 1", step_1_result)
-        return input_data
+def step_1(input_data: Step1Input) -> Step1Output:
+    print(input_data.value)
+    return Step1Output(result="transformed")
+
+
+class Step2Input(BaseModel):
+    value: str
+
+
+class Step2Output(BaseModel):
+    result: str
+
 
 @step(
-    name=Steps.STEP_3.value,
+    name_override="step_2_override",
     setup_script="clone_repo.sh",
     post_execution_script="push_to_git.sh",
-    metadata={
-        "type": "agent"
-    },
-    depends_on=[Steps.STEP_2.value]
+    metadata={"type": "agent"},
+    depends_on_steps=["step_1"],
+    params_from_step_results={"step_1_result": "step_1"},
 )
-def step_3(input_data: Annotated[str, STEP_INPUT], step2_result: Annotated[str, step_result(Steps.STEP_2.value)]) -> str:
-    print("This was the output of step 2:", step2_result)
-    return input_data
+def step_2(
+    input_data: Step2Input,
+    step_1_result: Step1Output,
+) -> Step2Output:
+    print("This was the output of step 1", step_1_result.result)
+    return Step2Output(result=input_data.value)
+
+
+class Step3Input(BaseModel):
+    value: str
+
+
+class Step3Output(BaseModel):
+    result: str
+
 
 @step(
-    name=Steps.STEP_4.value,
     setup_script="clone_repo.sh",
     post_execution_script="push_to_git.sh",
-    metadata={
-        "type": "agent"
-    },
-    depends_on=[Steps.STEP_2.value]
+    depends_on_steps=["step_2_override"],
+    params_from_step_results={"step_2_result": "step_2_override"},
 )
-def step_4(input_data: Annotated[str, STEP_INPUT], step2_result: Annotated[str, step_result(Steps.STEP_2.value)]) -> str:
-    print("This was the output of step 2:", step2_result)
+def step_3(
+    input_data: Step3Input,
+    step_2_result: Step2Output,
+) -> Step3Output:
+    print("This was the output of step 2:", step_2_result.result)
+    return Step3Output(result=input_data.value)
+
+
+class Step4Input(BaseModel):
+    value: str
+
+
+class Step4Output(BaseModel):
+    result: str
+
+
+@step(
+    setup_script="clone_repo.sh",
+    post_execution_script="push_to_git.sh",
+    metadata={"type": "agent"},
+    depends_on_steps=["step_2_override"],
+    params_from_step_results={"step_2_result": "step_2_override"},
+)
+def step_4(
+    input_data: Step4Input,
+    step_2_result: Step2Output,
+) -> Step4Output:
+    print("This was the output of step 2:", step_2_result.result)
     with BridgeSidecarClient() as client:
         res = client.start_agent("say hello", agent_name="agent_1003_cc_v2_rc-fp8-tpr")
         print(res)
-    return input_data
+    return Step4Output(result=input_data.value)

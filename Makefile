@@ -1,4 +1,4 @@
-.PHONY: venv sync proto docker-build docker-run docker-push-reg4
+.PHONY: venv sync proto test docker-build docker-run docker-push-reg4
 
 venv:
 	uv venv
@@ -8,6 +8,9 @@ sync:
 
 proto:
 	python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. --pyi_out=. proto/bridge_sidecar.proto
+
+test:
+	uv run pytest tests/ -v
 
 docker-build:
 	docker build -t bridge-sdk:latest .
@@ -33,11 +36,17 @@ docker-run:
 	else \
 		echo "Running without MODULE_PATH (discovering all steps from all modules)"; \
 	fi
+	@if [ -n "$(OUTPUT_FILE)" ]; then \
+		echo "Using explicit OUTPUT_FILE=$(OUTPUT_FILE)"; \
+	else \
+		echo "OUTPUT_FILE not provided, default will be used"; \
+	fi
 	docker run --rm \
 		-e REPO_URL="$(REPO_URL)" \
 		-e COMMIT_HASH="$(COMMIT_HASH)" \
 		-e AUTH_TOKEN="$(AUTH_TOKEN)" \
 		$(if $(MODULE_PATH),-e MODULE_PATH="$(MODULE_PATH)") \
+		$(if $(OUTPUT_FILE),-e OUTPUT_FILE="$(OUTPUT_FILE)") \
 		bridge-sdk:latest
 
 docker-push-reg4:

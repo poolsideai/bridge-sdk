@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""CLI runner for executing Steps with their setup and post-execution scripts."""
+"""CLI runner for executing Steps with their setup and post-execution scripts.
+
+Version Compatibility:
+This script imports STEP_REGISTRY from 'lib', which resolves based on PYTHONPATH.
+The entrypoint.sh sets PYTHONPATH so the cloned repo's bridge-sdk version takes precedence.
+This ensures both the cloned repo's code and this discovery script use the same bridge-sdk
+version, preventing version mismatch issues. The STEP_REGISTRY is shared because Python
+modules are singletons - all imports of 'lib.step' reference the same module instance.
+"""
 
 import argparse
 import importlib
@@ -10,7 +18,13 @@ from typing import Any, Dict, List, Optional
 import json
 
 from pydantic import BaseModel
+
+# Import from 'lib' - resolves to cloned repo's bridge-sdk version if available,
+# otherwise falls back to /app/lib (this discovery script's version)
 from lib import STEP_REGISTRY, StepRecord, get_dsl_output
+
+# Default output file path (defined once, used throughout)
+DEFAULT_OUTPUT_FILE = "/tmp/step_result.json"
 
 
 def discover_all_modules(base_path: str) -> List[str]:
@@ -74,6 +88,11 @@ def discover_steps(
 ) -> Dict[str, StepRecord]:
     """Dynamically discover all classes decorated with @step.
 
+    This function imports modules from the cloned repository, which causes their
+    @step decorators to execute and register steps in STEP_REGISTRY. The STEP_REGISTRY
+    is imported from 'lib', which (due to PYTHONPATH ordering) resolves to the cloned
+    repo's bridge-sdk version, ensuring version compatibility.
+
     If module_path is provided, imports that specific module.
     If base_path is provided, discovers and imports all modules from that path.
     If neither is provided, uses the current working directory.
@@ -129,7 +148,21 @@ def cmd_config_get_dsl(args):
 
     # Get DSL output from the registry
     dsl_output = get_dsl_output()
-    print(json.dumps(dsl_output, indent=2))
+    json_output = json.dumps(dsl_output, indent=2)
+
+    # Always print JSON to stdout for debugging purposes
+    print(json_output)
+
+    # Validate that output path is provided (should always have a value from parser default)
+    if not args.output:
+        print("Error: --output is required and cannot be empty", file=sys.stderr)
+        sys.exit(1)
+
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w") as f:
+        f.write(json_output)
+    print(f"DSL output written to: {args.output}", file=sys.stderr)
 
 
 def cmd_run_step(args):
@@ -257,6 +290,11 @@ def main():
         "--base-path",
         default=None,
         help="Base path to discover modules from (only used when --module is not provided, defaults to CLONE_DIR env var or current directory)",
+    )
+    get_dsl_parser.add_argument(
+        "--output",
+        default=DEFAULT_OUTPUT_FILE,
+        help=f"Output file path to write JSON DSL to (default: {DEFAULT_OUTPUT_FILE})",
     )
     get_dsl_parser.set_defaults(func=cmd_config_get_dsl)
 
