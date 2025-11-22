@@ -7,4 +7,5 @@ from .step import (
     STEP_INPUT,
     extract_step_result_annotation,
     ParamInfo,
+    get_dsl_output,
 )

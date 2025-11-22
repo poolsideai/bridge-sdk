@@ -8,16 +8,25 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+<<<<<<< HEAD
 .pytest_cache/
+=======
+>>>>>>> agoddijn/sdk-analysis-image
 .venv/
 venv/
 .env
 .git/
 .gitignore
 *.md
+<<<<<<< HEAD
 tests/
 .pytest_cache/
 .coverage
 htmlcov/
 .DS_Store
+=======
+examples/
+*.sh
+!docker-entrypoint.sh
+>>>>>>> agoddijn/sdk-analysis-image
 
