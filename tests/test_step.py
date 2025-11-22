@@ -4,7 +4,7 @@ import pytest
 from pathlib import Path
 from pydantic import BaseModel
 
-from lib import step, STEP_REGISTRY, StepData, get_dsl_output
+from lib import step, STEP_REGISTRY, StepData, StepRecord, get_dsl_output
 
 
 # Test Pydantic models
@@ -34,8 +34,10 @@ def test_step_decorator_basic():
         return "test"
 
     assert "test_step" in STEP_REGISTRY
-    # STEP_REGISTRY now stores StepData directly
-    step_data = STEP_REGISTRY["test_step"]
+    # STEP_REGISTRY now stores StepRecord objects
+    step_record = STEP_REGISTRY["test_step"]
+    assert isinstance(step_record, StepRecord)
+    step_data = step_record.data
     assert isinstance(step_data, StepData)
     assert step_data.name == "test_step"
 
@@ -49,7 +51,7 @@ def test_step_data_file_path_and_line_number():
     def test_func():
         return "test"
 
-    step_data = STEP_REGISTRY["test_file_location"]
+    step_data = STEP_REGISTRY["test_file_location"].data
 
     # Verify file_path is set
     assert step_data.file_path is not None
@@ -82,7 +84,7 @@ def test_step_data_all_fields():
     def complete_test_func():
         return "complete"
 
-    step_data = STEP_REGISTRY["complete_step"]
+    step_data = STEP_REGISTRY["complete_step"].data
 
     assert step_data.name == "complete_step"
     assert step_data.setup_script == "setup.sh"
@@ -101,8 +103,9 @@ def test_examples_file_path_and_line_number():
 
     # Check that steps from example.py have correct file paths
     # step_1 has no name_override, so it's registered as "step_1"
-    step_1_data = STEP_REGISTRY.get("step_1")
-    if step_1_data:
+    step_1_record = STEP_REGISTRY.get("step_1")
+    if step_1_record:
+        step_1_data = step_1_record.data
         assert step_1_data.file_path is not None
         # Should be a relative path
         assert not Path(step_1_data.file_path).is_absolute()
@@ -114,8 +117,9 @@ def test_examples_file_path_and_line_number():
         assert step_1_data.line_number <= 30
 
     # step_2 has name_override="step_2_override", so it's registered as "step_2_override"
-    step_2_data = STEP_REGISTRY.get("step_2_override")
-    if step_2_data:
+    step_2_record = STEP_REGISTRY.get("step_2_override")
+    if step_2_record:
+        step_2_data = step_2_record.data
         assert step_2_data.file_path is not None
         # Should be a relative path
         assert not Path(step_2_data.file_path).is_absolute()
@@ -143,8 +147,8 @@ def test_multiple_steps_different_locations():
     def step_b():
         return "b"
 
-    step_a_data = STEP_REGISTRY["step_a"]
-    step_b_data = STEP_REGISTRY["step_b"]
+    step_a_data = STEP_REGISTRY["step_a"].data
+    step_b_data = STEP_REGISTRY["step_b"].data
 
     # Both should have file paths
     assert step_a_data.file_path is not None
@@ -184,7 +188,7 @@ def test_params_json_schema_no_parameters():
     def no_params():
         return "test"
 
-    step_data = STEP_REGISTRY["no_params_step"]
+    step_data = STEP_REGISTRY["no_params_step"].data
     assert step_data.params_json_schema is not None
     assert isinstance(step_data.params_json_schema, dict)
     # Should have properties (even if empty)
@@ -200,7 +204,7 @@ def test_params_json_schema_with_parameters():
     def params_step(x: int, y: str = "default"):
         return f"{x}:{y}"
 
-    step_data = STEP_REGISTRY["params_step"]
+    step_data = STEP_REGISTRY["params_step"].data
     assert step_data.params_json_schema is not None
     assert isinstance(step_data.params_json_schema, dict)
     assert "properties" in step_data.params_json_schema
@@ -219,7 +223,7 @@ def test_return_json_schema():
     def return_step() -> TestOutput:
         return TestOutput(result="test")
 
-    step_data = STEP_REGISTRY["return_step"]
+    step_data = STEP_REGISTRY["return_step"].data
     assert step_data.return_json_schema is not None
     assert isinstance(step_data.return_json_schema, dict)
     # Should have schema information for TestOutput
@@ -239,7 +243,7 @@ def test_return_json_schema_no_return_type():
     def no_return_step():
         return "test"
 
-    step_data = STEP_REGISTRY["no_return_step"]
+    step_data = STEP_REGISTRY["no_return_step"].data
     # Should still have return_json_schema (may be empty dict or Any schema)
     assert step_data.return_json_schema is not None
     assert isinstance(step_data.return_json_schema, dict)
@@ -253,7 +257,7 @@ def test_params_json_schema_with_pydantic_input():
     def pydantic_input_step(input_data: TestInput) -> TestOutput:
         return TestOutput(result=input_data.value)
 
-    step_data = STEP_REGISTRY["pydantic_input_step"]
+    step_data = STEP_REGISTRY["pydantic_input_step"].data
     assert step_data.params_json_schema is not None
     assert "properties" in step_data.params_json_schema
     assert "input_data" in step_data.params_json_schema["properties"]
@@ -324,7 +328,7 @@ def test_params_from_step_results():
     def step_with_deps(prev_result: TestOutput) -> TestOutput:
         return prev_result
 
-    step_data = STEP_REGISTRY["step_with_deps"]
+    step_data = STEP_REGISTRY["step_with_deps"].data
     assert step_data.params_from_step_results is not None
     assert isinstance(step_data.params_from_step_results, dict)
     assert step_data.params_from_step_results["prev_result"] == "previous_step"
@@ -339,7 +343,7 @@ def test_optional_return_type():
     def optional_return_step() -> Optional[TestOutput]:
         return TestOutput(result="test")
 
-    step_data = STEP_REGISTRY["optional_return_step"]
+    step_data = STEP_REGISTRY["optional_return_step"].data
     assert step_data.return_json_schema is not None
     assert isinstance(step_data.return_json_schema, dict)
 
@@ -359,7 +363,7 @@ def test_union_return_type():
     def union_return_step() -> Union[Model1, Model2]:
         return Model1(value="test")
 
-    step_data = STEP_REGISTRY["union_return_step"]
+    step_data = STEP_REGISTRY["union_return_step"].data
     assert step_data.return_json_schema is not None
     assert isinstance(step_data.return_json_schema, dict)
 

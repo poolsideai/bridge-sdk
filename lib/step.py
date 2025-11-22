@@ -222,7 +222,15 @@ def _strip_annotated(annotation: Any) -> tuple[Any, tuple[Any, ...]]:
     return ann, metadata
 
 
-STEP_REGISTRY: Dict[str, StepData] = {}
+class StepRecord:
+    """A record containing both the step function and its metadata."""
+
+    def __init__(self, func: StepFunction[...], data: StepData):
+        self.func = func
+        self.data = data
+
+
+STEP_REGISTRY: Dict[str, StepRecord] = {}
 
 
 @overload
@@ -285,7 +293,7 @@ def step(
             params_from_step_results=params_from_step_results,
         )
 
-        STEP_REGISTRY[step_data.name] = step_data
+        STEP_REGISTRY[step_data.name] = StepRecord(func=the_func, data=step_data)
 
         def wrapper(*args, **kwargs):
             return the_func(*args, **kwargs)
@@ -319,9 +327,9 @@ def extract_step_result_annotation(annotation: str) -> Optional[str]:
 def get_dsl_output() -> Dict[str, Any]:
     """Generate DSL output from the step registry with type information."""
     dsl_output = {}
-    for step_name, step_data in STEP_REGISTRY.items():
-        # STEP_REGISTRY stores StepData directly
-        step_dict = step_data.model_dump(exclude_none=True)
+    for step_name, step_record in STEP_REGISTRY.items():
+        # STEP_REGISTRY stores StepRecord objects
+        step_dict = step_record.data.model_dump(exclude_none=True)
         dsl_output[step_name] = step_dict
 
     return dsl_output

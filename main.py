@@ -185,41 +185,53 @@ def cmd_run_step(args):
         print(f"Error parsing --results JSON: {e}")
         sys.exit(1)
 
-    # 3. Get the step function
+    # 3. Get the step function and metadata
     step_func = steps[step_name].func
     step_metadata = steps[step_name].data
 
     # Verify dependencies are available
-    dependencies = step_metadata.depends_on or []
+    dependencies = step_metadata.depends_on_steps or []
     missing_deps = [dep for dep in dependencies if dep not in cached_results]
     if missing_deps:
         raise ValueError(f"Missing cached results for: {', '.join(missing_deps)}")
 
-    # 4. Build arguments based on pre-extracted parameter information
+    # 4. Build arguments based on parameter schema and step result mappings
+    from typing import get_type_hints
+
     call_params = {}
-    parameters = step_metadata.parameters or []
+    type_hints = get_type_hints(step_func)
+    params_from_step_results = step_metadata.params_from_step_results or {}
 
-    for param_info in parameters:
-        param_name = param_info.name
+    # Get parameter names from the JSON schema (excludes 'return')
+    param_names = [
+        name
+        for name in step_metadata.params_json_schema.get("properties", {}).keys()
+        if name != "return"
+    ]
 
-        # Check if it's a step input
-        if param_info.is_step_input:
-            call_params[param_name] = resolve_step_input(
-                args.input, param_info.actual_type
-            )
+    # Parse the input JSON
+    try:
+        input_data = json.loads(args.input)
+    except json.JSONDecodeError as e:
+        print(f"Error parsing --input JSON: {e}")
+        sys.exit(1)
 
-        # Check if it's a step result
-        elif param_info.is_step_result:
-            step_result_name = param_info.step_result_name
+    for param_name in param_names:
+        # Check if it's a step result parameter
+        if param_name in params_from_step_results:
+            step_result_name = params_from_step_results[param_name]
             if step_result_name in cached_results:
                 cached_value = cached_results[step_result_name]
-                call_params[param_name] = resolve_step_input(
-                    cached_value, param_info.actual_type
-                )
+                param_type = type_hints.get(param_name, Any)
+                call_params[param_name] = resolve_step_input(cached_value, param_type)
             else:
                 raise ValueError(
                     f"Step result '{step_result_name}' not found in cached results"
                 )
+        else:
+            # It's a step input parameter - use the parsed input_data
+            param_type = type_hints.get(param_name, Any)
+            call_params[param_name] = resolve_step_input(input_data, param_type)
 
     # 5. Call the step function
     try:
