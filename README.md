@@ -33,8 +33,10 @@ make proto
 
 Specify which modules to scan for steps using one of these methods (in priority order):
 
-1. **CLI arguments**: `--module` (single) or `--modules` (multiple)
+1. **CLI arguments**: `--modules` (multiple module paths)
 2. **Config file**: `bridge_config.py` with `STEP_MODULES` list
+
+> **Note**: The `--module` (single) argument will be deprecated. Use `--modules` or configure `STEP_MODULES` in `bridge_config.py` instead.
 
 Create a `bridge_config.py` in your project root:
 
@@ -57,9 +59,6 @@ Discover all steps and retrieve their configuration:
 # Using config file (bridge_config.py)
 python main.py config get-dsl
 
-# Single module (backwards compatible)
-python main.py config get-dsl --module examples
-
 # Multiple modules
 python main.py config get-dsl --modules examples my_steps lib.custom_steps
 ```
@@ -78,8 +77,8 @@ python main.py run --step Step3 --results '{"Step2": "Hello world"}' --input "Yo
 - `--step`: Name of the step to execute (required)
 - `--results`: JSON object containing cached results from previous steps (required)
 - `--input`: Input data for the step (required)
-- `--module`: Single module path to discover steps from (optional)
-- `--modules`: Multiple module paths to discover steps from (optional)
+- `--modules`: Module paths to discover steps from (optional)
+- `--module`: *(deprecated)* Single module path (optional)
 
 If no module arguments are provided, modules are loaded from `bridge_config.py`.
 
@@ -280,7 +279,7 @@ Once the alias is set up, you can use `bridgecli` instead of `python main.py`:
 
 ```bash
 # Get DSL configuration
-bridgecli config get-dsl --module examples
+bridgecli config get-dsl --modules examples
 
 # Run a step
 bridgecli run --step Step3 --results '{"Step2": "Hello world"}' --input "Yours"

@@ -4,6 +4,7 @@
 import argparse
 import importlib
 import sys
+import warnings
 from typing import Any, Dict, get_args
 import json
 import inspect
@@ -23,6 +24,11 @@ def get_modules_from_args(args) -> list[str]:
     """Combine --module and --modules args, falling back to config file."""
     modules = []
     if args.module:
+        warnings.warn(
+            "--module is deprecated, use --modules or configure STEP_MODULES in bridge_config.py",
+            DeprecationWarning,
+            stacklevel=2
+        )
         modules.append(args.module)
     if args.modules:
         modules.extend(args.modules)
@@ -171,7 +177,7 @@ def main():
     get_dsl_parser = config_subparsers.add_parser('get-dsl', help='Get DSL for discovered steps')
     get_dsl_parser.add_argument(
         '--module',
-        help='Single module path to discover steps from (backwards compatible)'
+        help='[DEPRECATED] Use --modules or bridge_config.py instead'
     )
     get_dsl_parser.add_argument(
         '--modules',
@@ -199,7 +205,7 @@ def main():
     )
     run_parser.add_argument(
         '--module',
-        help='Single module path to discover steps from (backwards compatible)'
+        help='[DEPRECATED] Use --modules or bridge_config.py instead'
     )
     run_parser.add_argument(
         '--modules',
