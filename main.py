@@ -4,40 +4,76 @@
 import argparse
 import importlib
 import sys
-from typing import Any, Dict, Type, get_args
+import warnings
+from typing import Any, Dict, get_args
 import json
 import inspect
 
 from pydantic import BaseModel
 from lib import STEP_REGISTRY, StepRecord, STEP_INPUT, extract_step_result_annotation
 
-
-def discover_steps(module_path: str) -> Dict[str, StepRecord]:
-    """Dynamically discover all classes decorated with @step in a module."""
+def load_config_modules() -> list[str]:
+    """Load STEP_MODULES from bridge_config.py if it exists."""
     try:
-        # Import the module
-        importlib.import_module(module_path)
-    except ImportError as e:
-        print(f"Error importing module {module_path}: {e}")
-        sys.exit(1)
+        import bridge_config
+        return getattr(bridge_config, 'STEP_MODULES', [])
+    except ImportError:
+        return []
+
+def get_modules_from_args(args) -> list[str]:
+    """Combine --module and --modules args, falling back to config file."""
+    modules = []
+    if args.module:
+        warnings.warn(
+            "--module is deprecated, use --modules or configure STEP_MODULES in bridge_config.py",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        modules.append(args.module)
+    if args.modules:
+        modules.extend(args.modules)
+    if not modules:
+        modules = load_config_modules()
+    return modules
+
+def discover_steps(module_paths: list[str]) -> Dict[str, StepRecord]:
+    """Dynamically discover all classes decorated with @step in the specified modules.
+
+    Args:
+        module_paths: List of module paths to import and discover steps from.
+    """
+    for module_path in module_paths:
+        try:
+            importlib.import_module(module_path)
+        except ImportError as e:
+            print(f"Error importing module {module_path}: {e}")
+            sys.exit(1)
     return STEP_REGISTRY
 
 def cmd_config_get_dsl(args):
     """Handle 'config get-dsl' command."""
-    steps = discover_steps(args.module)
-    print({ step: data.data for (step, data) in STEP_REGISTRY.items() })
+    modules = get_modules_from_args(args)
+    if not modules:
+        print("Error: No modules specified. Use --module, --modules, or configure STEP_MODULES in bridge_config.py")
+        sys.exit(1)
+    discover_steps(modules)
+    print(json.dumps({ step: data.data.model_dump() for (step, data) in STEP_REGISTRY.items() }))
 
 
 def cmd_run_step(args):
     """Handle 'run' command to execute a step."""
-    # 1. Discover steps from the module
-    steps = discover_steps(args.module)
+    # 1. Discover steps from the modules
+    modules = get_modules_from_args(args)
+    if not modules:
+        print("Error: No modules specified. Use --module, --modules, or configure STEP_MODULES in bridge_config.py")
+        sys.exit(1)
+    steps = discover_steps(modules)
     step_name = args.step
 
     # 2. Find the step by name
     if step_name not in steps:
         print(steps)
-        print(f"Error: Step '{args.step}' not found in module '{args.module}'")
+        print(f"Error: Step '{args.step}' not found in modules '{modules}'")
         print(f"Available steps: {', '.join(steps.keys())}")
         sys.exit(1)
 
@@ -128,7 +164,6 @@ def resolve_step_input(cached_value: Any, actual_type: Any) -> Any:
         # Pass as-is
         return cached_value
 
-
 def main():
     parser = argparse.ArgumentParser(
         description='CLI for discovering and running Steps'
@@ -142,8 +177,12 @@ def main():
     get_dsl_parser = config_subparsers.add_parser('get-dsl', help='Get DSL for discovered steps')
     get_dsl_parser.add_argument(
         '--module',
-        required=True,
-        help='Module path to discover steps from'
+        help='[DEPRECATED] Use --modules or bridge_config.py instead'
+    )
+    get_dsl_parser.add_argument(
+        '--modules',
+        nargs='+',
+        help='Module paths to discover steps from (e.g., --modules examples my_steps)'
     )
     get_dsl_parser.set_defaults(func=cmd_config_get_dsl)
 
@@ -166,8 +205,12 @@ def main():
     )
     run_parser.add_argument(
         '--module',
-        default='examples',
-        help='Module path to discover steps from (default: examples)'
+        help='[DEPRECATED] Use --modules or bridge_config.py instead'
+    )
+    run_parser.add_argument(
+        '--modules',
+        nargs='+',
+        help='Module paths to discover steps from (e.g., --modules examples my_steps)'
     )
     run_parser.set_defaults(func=cmd_run_step)
 
