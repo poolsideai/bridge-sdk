@@ -57,7 +57,7 @@ def cmd_config_get_dsl(args):
         print("Error: No modules specified. Use --module, --modules, or configure STEP_MODULES in bridge_config.py")
         sys.exit(1)
     discover_steps(modules)
-    print({ step: data.data.model_dump_json() for (step, data) in STEP_REGISTRY.items() })
+    print(json.dumps({ step: data.data.model_dump() for (step, data) in STEP_REGISTRY.items() }))
 
 
 def cmd_run_step(args):
