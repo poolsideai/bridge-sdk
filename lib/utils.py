@@ -9,7 +9,7 @@ from typing import Optional
 # ============================================================================
 
 
-def find_repo_root(file_path: str) -> Optional[Path]:
+def _find_repo_root(file_path: str) -> Optional[Path]:
     """Find the repository root by looking for .git directory or pyproject.toml."""
     path = Path(file_path).resolve()
 
@@ -34,7 +34,7 @@ def get_relative_path(file_path: str) -> Optional[str]:
 
     try:
         abs_path = Path(file_path).resolve()
-        repo_root = find_repo_root(file_path)
+        repo_root = _find_repo_root(file_path)
 
         if repo_root:
             try:

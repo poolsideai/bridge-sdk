@@ -29,7 +29,7 @@ def test_step_decorator_basic():
     # Clear registry to start fresh
     STEP_REGISTRY.clear()
 
-    @step(name_override="test_step")
+    @step(name="test_step")
     def test_function():
         return "test"
 
@@ -47,7 +47,7 @@ def test_step_data_file_path_and_line_number():
     STEP_REGISTRY.clear()
 
     # Define a step function
-    @step(name_override="test_file_location")
+    @step(name="test_file_location")
     def test_func():
         return "test"
 
@@ -74,12 +74,12 @@ def test_step_data_all_fields():
     STEP_REGISTRY.clear()
 
     @step(
-        name_override="complete_step",
+        name="complete_step",
         setup_script="setup.sh",
         post_execution_script="cleanup.sh",
         metadata={"type": "test"},
         sandbox_id="test-sandbox",
-        depends_on_steps=["step1", "step2"],
+        depends_on=["step1", "step2"],
     )
     def complete_test_func():
         return "complete"
@@ -134,7 +134,7 @@ def test_multiple_steps_different_locations():
     """Test that different steps have different line numbers."""
     STEP_REGISTRY.clear()
 
-    @step(name_override="step_a")
+    @step(name="step_a")
     def step_a():
         return "a"
 
@@ -143,7 +143,7 @@ def test_multiple_steps_different_locations():
     _ = None
     _ = None
 
-    @step(name_override="step_b")
+    @step(name="step_b")
     def step_b():
         return "b"
 
@@ -184,7 +184,7 @@ def test_params_json_schema_no_parameters():
     """Test params_json_schema for a step with no parameters."""
     STEP_REGISTRY.clear()
 
-    @step(name_override="no_params_step")
+    @step(name="no_params_step")
     def no_params():
         return "test"
 
@@ -200,7 +200,7 @@ def test_params_json_schema_with_parameters():
     """Test params_json_schema for a step with parameters."""
     STEP_REGISTRY.clear()
 
-    @step(name_override="params_step")
+    @step(name="params_step")
     def params_step(x: int, y: str = "default"):
         return f"{x}:{y}"
 
@@ -219,7 +219,7 @@ def test_return_json_schema():
     """Test return_json_schema for a step with return type."""
     STEP_REGISTRY.clear()
 
-    @step(name_override="return_step")
+    @step(name="return_step")
     def return_step() -> TestOutput:
         return TestOutput(result="test")
 
@@ -239,7 +239,7 @@ def test_return_json_schema_no_return_type():
     """Test return_json_schema for a step without return type annotation."""
     STEP_REGISTRY.clear()
 
-    @step(name_override="no_return_step")
+    @step(name="no_return_step")
     def no_return_step():
         return "test"
 
@@ -253,7 +253,7 @@ def test_params_json_schema_with_pydantic_input():
     """Test params_json_schema with Pydantic model input."""
     STEP_REGISTRY.clear()
 
-    @step(name_override="pydantic_input_step")
+    @step(name="pydantic_input_step")
     def pydantic_input_step(input_data: TestInput) -> TestOutput:
         return TestOutput(result=input_data.value)
 
@@ -267,7 +267,7 @@ def test_get_dsl_output_json_serializable():
     """Test that get_dsl_output returns JSON-serializable data."""
     STEP_REGISTRY.clear()
 
-    @step(name_override="test_json_step")
+    @step(name="test_json_step")
     def test_step(input_data: TestInput) -> TestOutput:
         return TestOutput(result=input_data.value)
 
@@ -296,7 +296,7 @@ def test_get_dsl_output_with_pydantic_model():
     class TestOutput(BaseModel):
         result: str
 
-    @step(name_override="test_pydantic_step")
+    @step(name="test_pydantic_step")
     def test_step(input_data: TestInput) -> TestOutput:
         return TestOutput(result=input_data.value)
 
@@ -320,12 +320,13 @@ def test_get_dsl_output_with_pydantic_model():
 def test_params_from_step_results():
     """Test that params_from_step_results is properly set."""
     STEP_REGISTRY.clear()
+    from typing import Annotated
+    from lib import step_result
 
-    @step(
-        name_override="step_with_deps",
-        params_from_step_results={"prev_result": "previous_step"},
-    )
-    def step_with_deps(prev_result: TestOutput) -> TestOutput:
+    @step(name="step_with_deps")
+    def step_with_deps(
+        prev_result: Annotated[TestOutput, step_result("previous_step")],
+    ) -> TestOutput:
         return prev_result
 
     step_data = STEP_REGISTRY["step_with_deps"].data
@@ -339,7 +340,7 @@ def test_optional_return_type():
     STEP_REGISTRY.clear()
     from typing import Optional
 
-    @step(name_override="optional_return_step")
+    @step(name="optional_return_step")
     def optional_return_step() -> Optional[TestOutput]:
         return TestOutput(result="test")
 
@@ -359,13 +360,52 @@ def test_union_return_type():
     class Model2(BaseModel):
         value: int
 
-    @step(name_override="union_return_step")
+    @step(name="union_return_step")
     def union_return_step() -> Union[Model1, Model2]:
         return Model1(value="test")
 
     step_data = STEP_REGISTRY["union_return_step"].data
     assert step_data.return_json_schema is not None
     assert isinstance(step_data.return_json_schema, dict)
+
+
+def test_discriminated_union_return_type():
+    """Test return_json_schema with a Pydantic discriminated union return type."""
+    STEP_REGISTRY.clear()
+    from typing import Annotated, Literal, Union
+    from pydantic import Discriminator
+
+    class SuccessResponse(BaseModel):
+        status: Literal["success"]
+        data: str
+        code: int = 200
+
+    class ErrorResponse(BaseModel):
+        status: Literal["error"]
+        message: str
+        code: int = 400
+
+    # Create a discriminated union using Annotated with Discriminator
+    Response = Annotated[
+        Union[SuccessResponse, ErrorResponse],
+        Discriminator("status"),
+    ]
+
+    @step(name="discriminated_union_step")
+    def discriminated_union_step() -> Response:
+        return SuccessResponse(status="success", data="test data")
+
+    step_data = STEP_REGISTRY["discriminated_union_step"].data
+    assert step_data.return_json_schema is not None
+    assert isinstance(step_data.return_json_schema, dict)
+
+    # Verify the schema contains information about the discriminated union
+    # The schema should have either "anyOf", "oneOf", or discriminator information
+    schema = step_data.return_json_schema
+    # Check that it's a valid JSON schema structure
+    assert (
+        "type" in schema or "anyOf" in schema or "oneOf" in schema or "$defs" in schema
+    )
 
 
 if __name__ == "__main__":

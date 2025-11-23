@@ -18,11 +18,11 @@ class HelloWorldResult(BaseModel):
 
 
 @step(
-    name_override=AgentSteps.HELLO_WORLD_AGENT.value,
+    name=AgentSteps.HELLO_WORLD_AGENT.value,
     setup_script="clone_repo.sh",
     post_execution_script="push_to_git.sh",
     metadata={"type": "agent"},
-    depends_on_steps=[],
+    depends_on=[],
 )
 def hello_world_agent() -> HelloWorldResult:
     with BridgeSidecarClient() as client:
@@ -37,16 +37,17 @@ class ContinuationInput(BaseModel):
 
 
 @step(
-    name_override=AgentSteps.CONTINUATION_AGENT.value,
+    name=AgentSteps.CONTINUATION_AGENT.value,
     setup_script="clone_repo.sh",
     post_execution_script="push_to_git.sh",
     metadata={"type": "agent"},
-    depends_on_steps=[AgentSteps.HELLO_WORLD_AGENT.value],
-    params_from_step_results={"prev_result": AgentSteps.HELLO_WORLD_AGENT.value},
+    depends_on=[AgentSteps.HELLO_WORLD_AGENT.value],
 )
 def continuation_agent(
     input: ContinuationInput,
-    prev_result: HelloWorldResult,
+    prev_result: Annotated[
+        HelloWorldResult, step_result(AgentSteps.HELLO_WORLD_AGENT.value)
+    ],
 ) -> Optional[str]:
     with BridgeSidecarClient() as client:
         print(input)
