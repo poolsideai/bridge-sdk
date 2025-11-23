@@ -7,10 +7,11 @@ COMMIT_HASH="${COMMIT_HASH}"
 AUTH_TOKEN="${AUTH_TOKEN}"
 MODULE_PATH="${MODULE_PATH:-}"
 
-# Check if OUTPUT_FILE was explicitly provided
-if [ -z "$OUTPUT_FILE" ]; then
+# Check if DSL_OUTPUT_FILE (or OUTPUT_FILE for backward compatibility) was explicitly provided
+DSL_OUTPUT_FILE="${DSL_OUTPUT_FILE:-${OUTPUT_FILE:-}}"
+if [ -z "$DSL_OUTPUT_FILE" ]; then
     # No explicit output provided, default will be used by main.py
-    echo "No explicit OUTPUT_FILE provided, default will be used" >&2
+    echo "No explicit DSL_OUTPUT_FILE or OUTPUT_FILE provided, default will be used" >&2
 fi
 
 # Validate required variables
@@ -119,7 +120,14 @@ export CLONE_DIR="$CLONE_DIR"
 # Run the DSL generation command
 echo "Generating DSL..." >&2
 cd /app
-# Always pass --module, --base-path, and --output - empty strings will be treated as "not provided" in Python
-# main.py will handle the logic: if --module is provided, use it; otherwise use --base-path
-python main.py config get-dsl --module "${MODULE_PATH:-}" --base-path "$CLONE_DIR" --output "${OUTPUT_FILE:-}"
+# Build command arguments
+CMD_ARGS=("config" "get-dsl")
+if [ -n "${MODULE_PATH:-}" ]; then
+    CMD_ARGS+=("--modules" "$MODULE_PATH")
+fi
+# Pass --output-file-path if DSL_OUTPUT_FILE is set
+if [ -n "$DSL_OUTPUT_FILE" ]; then
+    CMD_ARGS+=("--output-file-path" "$DSL_OUTPUT_FILE")
+fi
+python main.py "${CMD_ARGS[@]}"
 

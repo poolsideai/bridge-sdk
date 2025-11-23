@@ -30,6 +30,17 @@ class Step:
     This is called when a step is executed through the bridge CLI.
     The arguments are to be passed as a json string
     """
+    _original_func: Callable[..., Any]
+    """The original function that was decorated. Used for direct invocation."""
+
+    def __call__(self, *args, **kwargs):
+        """Allow direct invocation of the step function."""
+        if inspect.iscoroutinefunction(self._original_func):
+            # For async functions, return a coroutine that can be awaited
+            return self._original_func(*args, **kwargs)
+        else:
+            # For sync functions, call directly
+            return self._original_func(*args, **kwargs)
 
 
 STEP_REGISTRY: Dict[str, Step] = {}
@@ -45,7 +56,7 @@ def step(
     post_execution_script: str | None = None,
     metadata: dict[str, Any] | None = None,
     sandbox_id: str | None = None,
-    depends_on: list[str] | None = None,
+    depends_on: list[str | Step] | None = None,
 ) -> StepFunction[...]:
     """Overload for usage as @step (no parentheses)."""
     ...
@@ -60,7 +71,7 @@ def step(
     post_execution_script: str | None = None,
     metadata: dict[str, Any] | None = None,
     sandbox_id: str | None = None,
-    depends_on: list[str] | None = None,
+    depends_on: list[str | Step] | None = None,
 ) -> Callable[[StepFunction[...]], StepFunction[...]]:
     """Overload for usage as @step(...)"""
     ...
@@ -75,20 +86,20 @@ def step(
     post_execution_script: str | None = None,
     metadata: dict[str, Any] | None = None,
     sandbox_id: str | None = None,
-    depends_on: list[str] | None = None,
-) -> StepFunction[...] | Callable[[StepFunction[...]], StepFunction[...]]:
+    depends_on: list[str | Step] | None = None,
+) -> Step | Callable[[StepFunction[...]], Step]:
     """Decorator for configuring a Step with execution metadata."""
 
     def _create_step(the_func: StepFunction[...]) -> Step:
         schema = function_schema(func=the_func)
         # Get the absolute file path of the function
-        func_file = inspect.getfile(func)
+        func_file = inspect.getfile(the_func)
         # Use get_relative_path which finds repo root by looking for .git or pyproject.toml
         file_path = get_relative_path(func_file)
 
         # Get the line number where the function is defined
         try:
-            line_number = inspect.getsourcelines(func)[1]
+            line_number = inspect.getsourcelines(the_func)[1]
         except (OSError, TypeError):
             # Fallback if source is not available (e.g., built-in functions, C extensions)
             line_number = None
@@ -156,9 +167,15 @@ def step(
             # create a pydantic TypeAdapter if the output is not already a BaseModel
             return result
 
-        step = Step(step_data=data, on_invoke_step=_on_invoke_step_impl)
+        step = Step(
+            step_data=data,
+            on_invoke_step=_on_invoke_step_impl,
+            _original_func=the_func,
+        )
 
-        STEP_REGISTRY[step_data.name] = step
+        STEP_REGISTRY[data.name] = step
+
+        return step
 
     # If func is actually a callable, we were used as @step with no parentheses
     if callable(func):
@@ -175,8 +192,8 @@ def get_dsl_output() -> Dict[str, Any]:
     """Generate DSL output from the step registry with type information."""
     dsl_output = {}
     for step_name, step in STEP_REGISTRY.items():
-        # STEP_REGISTRY stores StepRecord objects
-        step_dict = step.data.model_dump(exclude_none=True)
+        # STEP_REGISTRY stores Step objects
+        step_dict = step.step_data.model_dump(exclude_none=True)
         dsl_output[step_name] = step_dict
 
     return dsl_output

@@ -7,18 +7,12 @@ from proto.bridge_sidecar_pb2 import ContinueFrom, RunDetail
 from pydantic import BaseModel
 
 
-class AgentSteps(Enum):
-    HELLO_WORLD_AGENT = "HelloWorld"
-    CONTINUATION_AGENT = "Continuation"
-
-
 class HelloWorldResult(BaseModel):
     session_id: str
     res: str
 
 
 @step(
-    name=AgentSteps.HELLO_WORLD_AGENT.value,
     setup_script="clone_repo.sh",
     post_execution_script="push_to_git.sh",
     metadata={"type": "agent"},
@@ -37,17 +31,14 @@ class ContinuationInput(BaseModel):
 
 
 @step(
-    name=AgentSteps.CONTINUATION_AGENT.value,
     setup_script="clone_repo.sh",
     post_execution_script="push_to_git.sh",
     metadata={"type": "agent"},
-    depends_on=[AgentSteps.HELLO_WORLD_AGENT.value],
+    depends_on=[hello_world_agent],
 )
 def continuation_agent(
     input: ContinuationInput,
-    prev_result: Annotated[
-        HelloWorldResult, step_result(AgentSteps.HELLO_WORLD_AGENT.value)
-    ],
+    prev_result: Annotated[HelloWorldResult, step_result(hello_world_agent)],
 ) -> Optional[str]:
     with BridgeSidecarClient() as client:
         print(input)

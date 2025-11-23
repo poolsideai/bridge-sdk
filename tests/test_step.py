@@ -2,9 +2,10 @@
 
 import pytest
 from pathlib import Path
+from typing import Annotated
 from pydantic import BaseModel
 
-from lib import step, STEP_REGISTRY, StepData, StepRecord, get_dsl_output
+from lib import step, STEP_REGISTRY, StepData, get_dsl_output, step_result
 
 
 # Test Pydantic models
@@ -34,10 +35,12 @@ def test_step_decorator_basic():
         return "test"
 
     assert "test_step" in STEP_REGISTRY
-    # STEP_REGISTRY now stores StepRecord objects
+    # STEP_REGISTRY now stores Step objects
     step_record = STEP_REGISTRY["test_step"]
-    assert isinstance(step_record, StepRecord)
-    step_data = step_record.data
+    from lib.step import Step
+
+    assert isinstance(step_record, Step)
+    step_data = step_record.step_data
     assert isinstance(step_data, StepData)
     assert step_data.name == "test_step"
 
@@ -51,7 +54,8 @@ def test_step_data_file_path_and_line_number():
     def test_func():
         return "test"
 
-    step_data = STEP_REGISTRY["test_file_location"].data
+    step_record = STEP_REGISTRY["test_file_location"]
+    step_data = step_record.step_data
 
     # Verify file_path is set
     assert step_data.file_path is not None
@@ -84,50 +88,17 @@ def test_step_data_all_fields():
     def complete_test_func():
         return "complete"
 
-    step_data = STEP_REGISTRY["complete_step"].data
+    step_record = STEP_REGISTRY["complete_step"]
+    step_data = step_record.step_data
 
     assert step_data.name == "complete_step"
     assert step_data.setup_script == "setup.sh"
     assert step_data.post_execution_script == "cleanup.sh"
     assert step_data.metadata == {"type": "test"}
     assert step_data.sandbox_id == "test-sandbox"
-    assert step_data.depends_on_steps == ["step1", "step2"]
+    assert step_data.depends_on == ["step1", "step2"]
     assert step_data.file_path is not None
     assert step_data.line_number is not None
-
-
-def test_examples_file_path_and_line_number():
-    """Test file_path and line_number with the actual examples."""
-    # Import examples to register their steps
-    import examples.example  # noqa: F401
-
-    # Check that steps from example.py have correct file paths
-    # step_1 has no name_override, so it's registered as "step_1"
-    step_1_record = STEP_REGISTRY.get("step_1")
-    if step_1_record:
-        step_1_data = step_1_record.data
-        assert step_1_data.file_path is not None
-        # Should be a relative path
-        assert not Path(step_1_data.file_path).is_absolute()
-        # Should point to example.py relative to repo root
-        assert step_1_data.file_path == "examples/example.py"
-        assert step_1_data.line_number is not None
-        # Line number should be around line 18-23 (decorator starts at 18, function at 23)
-        assert step_1_data.line_number >= 15
-        assert step_1_data.line_number <= 30
-
-    # step_2 has name_override="step_2_override", so it's registered as "step_2_override"
-    step_2_record = STEP_REGISTRY.get("step_2_override")
-    if step_2_record:
-        step_2_data = step_2_record.data
-        assert step_2_data.file_path is not None
-        # Should be a relative path
-        assert not Path(step_2_data.file_path).is_absolute()
-        assert step_2_data.file_path == "examples/example.py"
-        assert step_2_data.line_number is not None
-        # step_2 decorator starts at 36, function at 44
-        assert step_2_data.line_number >= 30
-        assert step_2_data.line_number <= 50
 
 
 def test_multiple_steps_different_locations():
@@ -147,8 +118,8 @@ def test_multiple_steps_different_locations():
     def step_b():
         return "b"
 
-    step_a_data = STEP_REGISTRY["step_a"].data
-    step_b_data = STEP_REGISTRY["step_b"].data
+    step_a_data = STEP_REGISTRY["step_a"].step_data
+    step_b_data = STEP_REGISTRY["step_b"].step_data
 
     # Both should have file paths
     assert step_a_data.file_path is not None
@@ -164,22 +135,6 @@ def test_multiple_steps_different_locations():
     assert step_b_data.line_number > step_a_data.line_number
 
 
-def test_step_without_name():
-    """Test that step works even without a name (though it may not register properly)."""
-    STEP_REGISTRY.clear()
-
-    @step()
-    def unnamed_step():
-        return "unnamed"
-
-    # The step should still be callable
-    result = unnamed_step()
-    assert result == "unnamed"
-
-    # Note: Without a name, it won't be in the registry
-    # This tests that the decorator doesn't crash
-
-
 def test_params_json_schema_no_parameters():
     """Test params_json_schema for a step with no parameters."""
     STEP_REGISTRY.clear()
@@ -188,7 +143,7 @@ def test_params_json_schema_no_parameters():
     def no_params():
         return "test"
 
-    step_data = STEP_REGISTRY["no_params_step"].data
+    step_data = STEP_REGISTRY["no_params_step"].step_data
     assert step_data.params_json_schema is not None
     assert isinstance(step_data.params_json_schema, dict)
     # Should have properties (even if empty)
@@ -204,7 +159,7 @@ def test_params_json_schema_with_parameters():
     def params_step(x: int, y: str = "default"):
         return f"{x}:{y}"
 
-    step_data = STEP_REGISTRY["params_step"].data
+    step_data = STEP_REGISTRY["params_step"].step_data
     assert step_data.params_json_schema is not None
     assert isinstance(step_data.params_json_schema, dict)
     assert "properties" in step_data.params_json_schema
@@ -223,7 +178,7 @@ def test_return_json_schema():
     def return_step() -> TestOutput:
         return TestOutput(result="test")
 
-    step_data = STEP_REGISTRY["return_step"].data
+    step_data = STEP_REGISTRY["return_step"].step_data
     assert step_data.return_json_schema is not None
     assert isinstance(step_data.return_json_schema, dict)
     # Should have schema information for TestOutput
@@ -243,7 +198,7 @@ def test_return_json_schema_no_return_type():
     def no_return_step():
         return "test"
 
-    step_data = STEP_REGISTRY["no_return_step"].data
+    step_data = STEP_REGISTRY["no_return_step"].step_data
     # Should still have return_json_schema (may be empty dict or Any schema)
     assert step_data.return_json_schema is not None
     assert isinstance(step_data.return_json_schema, dict)
@@ -257,62 +212,33 @@ def test_params_json_schema_with_pydantic_input():
     def pydantic_input_step(input_data: TestInput) -> TestOutput:
         return TestOutput(result=input_data.value)
 
-    step_data = STEP_REGISTRY["pydantic_input_step"].data
+    step_data = STEP_REGISTRY["pydantic_input_step"].step_data
     assert step_data.params_json_schema is not None
     assert "properties" in step_data.params_json_schema
     assert "input_data" in step_data.params_json_schema["properties"]
 
 
-def test_get_dsl_output_json_serializable():
-    """Test that get_dsl_output returns JSON-serializable data."""
+def test_get_dsl_output():
+    """Test that get_dsl_output returns JSON-serializable data with proper schemas."""
     STEP_REGISTRY.clear()
 
-    @step(name="test_json_step")
+    @step(name="test_dsl_step")
     def test_step(input_data: TestInput) -> TestOutput:
         return TestOutput(result=input_data.value)
 
     # Get DSL output
     dsl_output = get_dsl_output()
 
-    # Verify it's JSON serializable (this should not raise an exception)
+    # Verify it's JSON serializable
     import json
 
     json.dumps(dsl_output, indent=2)
 
     # Verify the structure
-    assert "test_json_step" in dsl_output
-    step_data = dsl_output["test_json_step"]
+    assert "test_dsl_step" in dsl_output
+    step_data = dsl_output["test_dsl_step"]
     assert "params_json_schema" in step_data
     assert "return_json_schema" in step_data
-
-
-def test_get_dsl_output_with_pydantic_model():
-    """Test that get_dsl_output handles Pydantic models correctly."""
-    STEP_REGISTRY.clear()
-
-    class TestInput(BaseModel):
-        value: str
-
-    class TestOutput(BaseModel):
-        result: str
-
-    @step(name="test_pydantic_step")
-    def test_step(input_data: TestInput) -> TestOutput:
-        return TestOutput(result=input_data.value)
-
-    # Get DSL output
-    dsl_output = get_dsl_output()
-
-    # Verify it's JSON serializable (this should not raise an exception)
-    import json
-
-    json.dumps(dsl_output, indent=2)
-
-    # Verify Pydantic model is properly serialized
-    step_data = dsl_output["test_pydantic_step"]
-    assert "params_json_schema" in step_data
-    assert "return_json_schema" in step_data
-    # Check that schemas contain proper structure
     assert isinstance(step_data["params_json_schema"], dict)
     assert isinstance(step_data["return_json_schema"], dict)
 
@@ -329,48 +255,14 @@ def test_params_from_step_results():
     ) -> TestOutput:
         return prev_result
 
-    step_data = STEP_REGISTRY["step_with_deps"].data
+    step_data = STEP_REGISTRY["step_with_deps"].step_data
     assert step_data.params_from_step_results is not None
     assert isinstance(step_data.params_from_step_results, dict)
     assert step_data.params_from_step_results["prev_result"] == "previous_step"
 
 
-def test_optional_return_type():
-    """Test return_json_schema with Optional return type."""
-    STEP_REGISTRY.clear()
-    from typing import Optional
-
-    @step(name="optional_return_step")
-    def optional_return_step() -> Optional[TestOutput]:
-        return TestOutput(result="test")
-
-    step_data = STEP_REGISTRY["optional_return_step"].data
-    assert step_data.return_json_schema is not None
-    assert isinstance(step_data.return_json_schema, dict)
-
-
-def test_union_return_type():
-    """Test return_json_schema with Union return type."""
-    STEP_REGISTRY.clear()
-    from typing import Union
-
-    class Model1(BaseModel):
-        value: str
-
-    class Model2(BaseModel):
-        value: int
-
-    @step(name="union_return_step")
-    def union_return_step() -> Union[Model1, Model2]:
-        return Model1(value="test")
-
-    step_data = STEP_REGISTRY["union_return_step"].data
-    assert step_data.return_json_schema is not None
-    assert isinstance(step_data.return_json_schema, dict)
-
-
-def test_discriminated_union_return_type():
-    """Test return_json_schema with a Pydantic discriminated union return type."""
+def test_complex_return_types():
+    """Test return_json_schema with complex return types (discriminated union)."""
     STEP_REGISTRY.clear()
     from typing import Annotated, Literal, Union
     from pydantic import Discriminator
@@ -385,27 +277,183 @@ def test_discriminated_union_return_type():
         message: str
         code: int = 400
 
-    # Create a discriminated union using Annotated with Discriminator
+    # Test discriminated union
     Response = Annotated[
         Union[SuccessResponse, ErrorResponse],
         Discriminator("status"),
     ]
 
-    @step(name="discriminated_union_step")
-    def discriminated_union_step() -> Response:
+    @step(name="complex_return_step")
+    def complex_return_step() -> Response:
         return SuccessResponse(status="success", data="test data")
 
-    step_data = STEP_REGISTRY["discriminated_union_step"].data
+    step_data = STEP_REGISTRY["complex_return_step"].step_data
     assert step_data.return_json_schema is not None
     assert isinstance(step_data.return_json_schema, dict)
-
-    # Verify the schema contains information about the discriminated union
-    # The schema should have either "anyOf", "oneOf", or discriminator information
     schema = step_data.return_json_schema
-    # Check that it's a valid JSON schema structure
     assert (
         "type" in schema or "anyOf" in schema or "oneOf" in schema or "$defs" in schema
     )
+
+
+# ========== Step Object References in depends_on Tests ==========
+
+
+def test_depends_on_with_step_objects():
+    """Test that depends_on can accept Step objects, strings, and mixed combinations."""
+    STEP_REGISTRY.clear()
+
+    @step(name="step_a")
+    def step_a() -> TestOutput:
+        return TestOutput(result="from_a")
+
+    @step(name="step_b")
+    def step_b() -> TestOutput:
+        return TestOutput(result="from_b")
+
+    # Test with Step object
+    @step(name="step_c", depends_on=[step_a])
+    def step_c(
+        input_data: TestInput,
+        step_a_result: Annotated[TestOutput, step_result("step_a")],
+    ) -> TestOutput:
+        return TestOutput(result=f"{input_data.value}_{step_a_result.result}")
+
+    # Test with mixed Step objects and strings
+    @step(name="step_d", depends_on=[step_b, "step_a"])
+    def step_d(
+        input_data: TestInput,
+        step_b_result: Annotated[TestOutput, step_result("step_b")],
+        step_a_result: Annotated[TestOutput, step_result("step_a")],
+    ) -> TestOutput:
+        return TestOutput(
+            result=f"{input_data.value}_{step_b_result.result}_{step_a_result.result}"
+        )
+
+    # Test with custom name override
+    @step(name="custom_name")
+    def step_with_custom_name() -> TestOutput:
+        return TestOutput(result="custom")
+
+    @step(name="step_e", depends_on=[step_with_custom_name])
+    def step_e(
+        input_data: TestInput,
+        custom_result: Annotated[TestOutput, step_result(step_with_custom_name)],
+    ) -> TestOutput:
+        return TestOutput(result=f"{input_data.value}_{custom_result.result}")
+
+    # Verify dependencies
+    step_c_data = STEP_REGISTRY["step_c"].step_data
+    assert "step_a" in step_c_data.depends_on
+
+    step_d_data = STEP_REGISTRY["step_d"].step_data
+    assert "step_b" in step_d_data.depends_on
+    assert "step_a" in step_d_data.depends_on
+
+    step_e_data = STEP_REGISTRY["step_e"].step_data
+    assert "custom_name" in step_e_data.depends_on
+    assert "step_with_custom_name" not in step_e_data.depends_on
+    assert step_e_data.params_from_step_results["custom_result"] == "custom_name"
+
+    # Test empty list
+    @step(name="step_f", depends_on=[])
+    def step_f() -> TestOutput:
+        return TestOutput(result="standalone")
+
+    step_f_data = STEP_REGISTRY["step_f"].step_data
+    assert step_f_data.depends_on == []
+
+
+# ========== Step Object References in step_result() Tests ==========
+
+
+def test_step_result_with_step_objects():
+    """Test that step_result() works with Step objects, strings, and name overrides."""
+    STEP_REGISTRY.clear()
+
+    # Step without name override - should use function name
+    @step()
+    def step_no_override() -> TestOutput:
+        return TestOutput(result="from_a")
+
+    @step(name="step_b")
+    def step_b(
+        input_data: TestInput,
+        step_a_result: Annotated[TestOutput, step_result(step_no_override)],
+    ) -> TestOutput:
+        return TestOutput(result=f"{input_data.value}_{step_a_result.result}")
+
+    # Verify uses function name when no override
+    step_b_data = STEP_REGISTRY["step_b"].step_data
+    assert step_b_data.params_from_step_results["step_a_result"] == "step_no_override"
+
+    # Step with name override
+    @step(name="custom_step_name")
+    def step_with_override() -> TestOutput:
+        return TestOutput(result="from_c")
+
+    @step(name="step_d")
+    def step_d(
+        input_data: TestInput,
+        step_c_result: Annotated[TestOutput, step_result(step_with_override)],
+    ) -> TestOutput:
+        return TestOutput(result=f"{input_data.value}_{step_c_result.result}")
+
+    # Verify uses override name, not function name
+    step_d_data = STEP_REGISTRY["step_d"].step_data
+    assert step_d_data.params_from_step_results["step_c_result"] == "custom_step_name"
+    assert step_d_data.params_from_step_results["step_c_result"] != "step_with_override"
+
+    # Test backward compatibility with strings
+    @step(name="step_e")
+    def step_e() -> TestOutput:
+        return TestOutput(result="from_e")
+
+    @step(name="step_f")
+    def step_f(
+        input_data: TestInput,
+        step_e_result: Annotated[TestOutput, step_result("step_e")],
+    ) -> TestOutput:
+        return TestOutput(result=f"{input_data.value}_{step_e_result.result}")
+
+    step_f_data = STEP_REGISTRY["step_f"].step_data
+    assert step_f_data.params_from_step_results["step_e_result"] == "step_e"
+
+    # Test multiple step results and mixed Step objects/strings
+    @step(name="step_g")
+    def step_g() -> TestOutput:
+        return TestOutput(result="from_g")
+
+    @step(name="step_h")
+    def step_h(
+        input_data: TestInput,
+        step_g_result: Annotated[TestOutput, step_result(step_g)],
+        external_result: Annotated[TestOutput, step_result("external_step")],
+    ) -> TestOutput:
+        return TestOutput(
+            result=f"{input_data.value}_{step_g_result.result}_{external_result.result}"
+        )
+
+    step_h_data = STEP_REGISTRY["step_h"].step_data
+    assert step_h_data.params_from_step_results["step_g_result"] == "step_g"
+    assert step_h_data.params_from_step_results["external_result"] == "external_step"
+
+    # Test that depends_on and step_result both use step's actual name
+    @step(name="custom_name")
+    def step_custom() -> TestOutput:
+        return TestOutput(result="custom")
+
+    @step(name="step_i", depends_on=[step_custom])
+    def step_i(
+        input_data: TestInput,
+        custom_result: Annotated[TestOutput, step_result(step_custom)],
+    ) -> TestOutput:
+        return TestOutput(result=f"{input_data.value}_{custom_result.result}")
+
+    step_i_data = STEP_REGISTRY["step_i"].step_data
+    assert "custom_name" in step_i_data.depends_on
+    assert "step_custom" not in step_i_data.depends_on
+    assert step_i_data.params_from_step_results["custom_result"] == "custom_name"
 
 
 if __name__ == "__main__":

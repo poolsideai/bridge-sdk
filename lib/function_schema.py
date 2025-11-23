@@ -34,12 +34,7 @@ class FunctionSchema:
         keyword_args: dict[str, Any] = {}
         seen_var_positional = False
 
-        # Use enumerate() so we can skip the first parameter if it's context.
         for idx, (name, param) in enumerate(self.signature.parameters.items()):
-            # If the function takes a RunContextWrapper and this is the first parameter, skip it.
-            if self.takes_context and idx == 0:
-                continue
-
             value = getattr(data, name, None)
             if param.kind == param.VAR_POSITIONAL:
                 # e.g. *args: extend positional args and mark that *args is now seen
@@ -203,6 +198,7 @@ def function_schema(func: Callable[..., Any]) -> FunctionSchema:
         name=func_name,
         params_pydantic_model=dynamic_model,
         params_json_schema=json_schema,
+        param_annotations=param_annotations,
         return_json_schema=return_json_schema,
         signature=sig,
     )

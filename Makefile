@@ -16,37 +16,35 @@ docker-build:
 	docker build -t bridge-sdk:latest .
 
 docker-run:
-	@if [ -z "$(REPO_URL)" ]; then \
-		echo "Error: REPO_URL is required. Usage: make docker-run REPO_URL=... COMMIT_HASH=... AUTH_TOKEN=... [MODULE_PATH=...]"; \
-		echo "  Note: If MODULE_PATH is not provided, all modules in the repository will be discovered."; \
-		exit 1; \
-	fi
-	@if [ -z "$(COMMIT_HASH)" ]; then \
-		echo "Error: COMMIT_HASH is required. Usage: make docker-run REPO_URL=... COMMIT_HASH=... AUTH_TOKEN=... [MODULE_PATH=...]"; \
-		echo "  Note: If MODULE_PATH is not provided, all modules in the repository will be discovered."; \
-		exit 1; \
-	fi
-	@if [ -z "$(AUTH_TOKEN)" ]; then \
-		echo "Error: AUTH_TOKEN is required. Usage: make docker-run REPO_URL=... COMMIT_HASH=... AUTH_TOKEN=... [MODULE_PATH=...]"; \
-		echo "  Note: If MODULE_PATH is not provided, all modules in the repository will be discovered."; \
-		exit 1; \
-	fi
+	@echo "Note: Required variables (REPO_URL, COMMIT_HASH, AUTH_TOKEN) can be provided via:"; \
+	echo "  - Command line: make docker-run REPO_URL=... COMMIT_HASH=... AUTH_TOKEN=..."; \
+	echo "  - .env file: Variables will be loaded from .env if it exists"; \
+	echo "  - Environment: Variables can be set in your shell environment"
 	@if [ -n "$(MODULE_PATH)" ]; then \
 		echo "Running with MODULE_PATH=$(MODULE_PATH) (discovering steps from specific module)"; \
 	else \
 		echo "Running without MODULE_PATH (discovering all steps from all modules)"; \
 	fi
-	@if [ -n "$(OUTPUT_FILE)" ]; then \
+	@if [ -n "$(DSL_OUTPUT_FILE)" ]; then \
+		echo "Using explicit DSL_OUTPUT_FILE=$(DSL_OUTPUT_FILE)"; \
+	elif [ -n "$(OUTPUT_FILE)" ]; then \
 		echo "Using explicit OUTPUT_FILE=$(OUTPUT_FILE)"; \
 	else \
-		echo "OUTPUT_FILE not provided, default will be used"; \
+		echo "DSL_OUTPUT_FILE/OUTPUT_FILE not provided, default will be used"; \
 	fi
+	@if [ -f .env ]; then \
+		echo "Loading environment variables from .env file..."; \
+		ENV_FILE_FLAG="--env-file .env"; \
+	else \
+		ENV_FILE_FLAG=""; \
+	fi; \
 	docker run --rm \
-		-e REPO_URL="$(REPO_URL)" \
-		-e COMMIT_HASH="$(COMMIT_HASH)" \
-		-e AUTH_TOKEN="$(AUTH_TOKEN)" \
+		$$ENV_FILE_FLAG \
+		$(if $(REPO_URL),-e REPO_URL="$(REPO_URL)") \
+		$(if $(COMMIT_HASH),-e COMMIT_HASH="$(COMMIT_HASH)") \
+		$(if $(AUTH_TOKEN),-e AUTH_TOKEN="$(AUTH_TOKEN)") \
 		$(if $(MODULE_PATH),-e MODULE_PATH="$(MODULE_PATH)") \
-		$(if $(OUTPUT_FILE),-e OUTPUT_FILE="$(OUTPUT_FILE)") \
+		$(if $(DSL_OUTPUT_FILE),-e DSL_OUTPUT_FILE="$(DSL_OUTPUT_FILE)") \
 		bridge-sdk:latest
 
 docker-push-reg4:
