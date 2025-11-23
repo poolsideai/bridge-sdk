@@ -25,7 +25,7 @@ def discover_steps(module_path: str) -> Dict[str, StepRecord]:
 def cmd_config_get_dsl(args):
     """Handle 'config get-dsl' command."""
     steps = discover_steps(args.module)
-    print({ step: data.data for (step, data) in STEP_REGISTRY.items() })
+    print({ step: data.data.model_dump_json() for (step, data) in STEP_REGISTRY.items() })
 
 
 def cmd_run_step(args):
