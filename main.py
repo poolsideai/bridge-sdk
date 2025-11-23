@@ -144,6 +144,16 @@ def cmd_run_step(args):
         result = step_func(**call_params)
         print(f"Step '{args.step}' executed successfully")
         print(f"Result: {result}")
+
+        # Write result to output file if specified
+        if args.output_file:
+            with open(args.output_file, 'w') as f:
+                if isinstance(result, BaseModel):
+                    f.write(result.model_dump_json())
+                elif isinstance(result, (dict, list)):
+                    f.write(json.dumps(result))
+                else:
+                    f.write(str(result))
     except Exception as e:
         print(f"Error executing step '{args.step}': {e}")
         import traceback
@@ -211,6 +221,10 @@ def main():
         '--modules',
         nargs='+',
         help='Module paths to discover steps from (e.g., --modules examples my_steps)'
+    )
+    run_parser.add_argument(
+        '--output-file',
+        help='Path to write the step result to'
     )
     run_parser.set_defaults(func=cmd_run_step)
 
