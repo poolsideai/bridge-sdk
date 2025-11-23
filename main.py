@@ -167,14 +167,20 @@ def cmd_config_get_dsl(args):
 
 def cmd_run_step(args):
     """Handle 'run' command to execute a step."""
-    # 1. Discover steps from the module
-    steps = discover_steps(args.module)
+    # 1. Discover steps from the modules
+    modules = get_modules_from_args(args)
+    if not modules:
+        print(
+            "Error: No modules specified. Use --module, --modules, or configure STEP_MODULES in bridge_config.py"
+        )
+        sys.exit(1)
+    steps = discover_steps(modules)
     step_name = args.step
 
     # 2. Find the step by name
     if step_name not in steps:
         print(steps)
-        print(f"Error: Step '{args.step}' not found in module '{args.module}'")
+        print(f"Error: Step '{args.step}' not found in modules '{modules}'")
         print(f"Available steps: {', '.join(steps.keys())}")
         sys.exit(1)
 

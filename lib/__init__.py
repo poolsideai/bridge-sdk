@@ -2,8 +2,8 @@ from .step import (
     step,
     STEP_REGISTRY,
     StepData,
-    StepRecord,
-    step_result,
-    extract_step_result_annotation,
+    Step,
     get_dsl_output,
 )
+
+from .step_data import step_result
