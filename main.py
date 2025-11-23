@@ -57,9 +57,14 @@ def cmd_config_get_dsl(args):
         sys.exit(1)
     discover_steps(modules)
     dsl_json = json.dumps(
-        {step: data.data.model_dump() for (step, data) in STEP_REGISTRY.items()},
+        {
+            step_name: step.step_data.model_dump()
+            for (step_name, step) in STEP_REGISTRY.items()
+        },
         indent=2,
     )
+
+    print(dsl_json)
 
     # Write to output file
     output_path = Path(args.output_file_path)
