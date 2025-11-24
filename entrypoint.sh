@@ -3,7 +3,8 @@ set -e
 
 # Parse environment variables
 REPO_URL="${REPO_URL}"
-COMMIT_HASH="${COMMIT_HASH}"
+BRANCH_NAME="${BRANCH_NAME}"
+COMMIT_HASH="${COMMIT_HASH:-}"
 AUTH_TOKEN="${AUTH_TOKEN}"
 MODULE_PATH="${MODULE_PATH:-}"
 
@@ -20,8 +21,8 @@ if [ -z "$REPO_URL" ]; then
     exit 1
 fi
 
-if [ -z "$COMMIT_HASH" ]; then
-    echo "Error: COMMIT_HASH environment variable is required" >&2
+if [ -z "$BRANCH_NAME" ]; then
+    echo "Error: BRANCH_NAME environment variable is required" >&2
     exit 1
 fi
 
@@ -54,13 +55,43 @@ git clone "$REPO_URL_WITH_TOKEN" "$CLONE_DIR" || {
     exit 1
 }
 
-# Checkout specific commit
+# Checkout branch and commit
 cd "$CLONE_DIR"
+echo "Fetching branch $BRANCH_NAME..." >&2
+git fetch origin "$BRANCH_NAME" || {
+    echo "Error: Failed to fetch branch $BRANCH_NAME" >&2
+    exit 1
+}
+
+# Determine which commit to use
+if [ -z "$COMMIT_HASH" ]; then
+    # Get the latest commit on the branch
+    echo "No commit hash provided, getting latest commit on branch $BRANCH_NAME..." >&2
+    COMMIT_HASH=$(git rev-parse "origin/$BRANCH_NAME") || {
+        echo "Error: Failed to get latest commit on branch $BRANCH_NAME" >&2
+        exit 1
+    }
+    echo "Latest commit on branch: $COMMIT_HASH" >&2
+else
+    echo "Using provided commit hash: $COMMIT_HASH" >&2
+fi
+
+# Checkout the commit
 echo "Checking out commit $COMMIT_HASH..." >&2
 git checkout "$COMMIT_HASH" || {
     echo "Error: Failed to checkout commit $COMMIT_HASH" >&2
     exit 1
 }
+
+# Get commit hash (full) and timestamp
+ACTUAL_COMMIT_HASH=$(git rev-parse HEAD)
+COMMIT_TIMESTAMP=$(git show -s --format=%ct "$ACTUAL_COMMIT_HASH")
+
+# Export commit information for Python script
+export COMMIT_HASH="$ACTUAL_COMMIT_HASH"
+export COMMIT_TIMESTAMP="$COMMIT_TIMESTAMP"
+echo "Commit hash: $ACTUAL_COMMIT_HASH" >&2
+echo "Commit timestamp: $COMMIT_TIMESTAMP" >&2
 
 # Install dependencies from the cloned repository if pyproject.toml exists
 VENV_SITE_PACKAGES=""

@@ -16,10 +16,11 @@ docker-build:
 	docker build -t bridge-sdk:latest .
 
 docker-run:
-	@echo "Note: Required variables (REPO_URL, COMMIT_HASH, AUTH_TOKEN) can be provided via:"; \
-	echo "  - Command line: make docker-run REPO_URL=... COMMIT_HASH=... AUTH_TOKEN=..."; \
+	@echo "Note: Required variables (REPO_URL, BRANCH_NAME, AUTH_TOKEN) can be provided via:"; \
+	echo "  - Command line: make docker-run REPO_URL=... BRANCH_NAME=... AUTH_TOKEN=... [COMMIT_HASH=...]"; \
 	echo "  - .env file: Variables will be loaded from .env if it exists"; \
-	echo "  - Environment: Variables can be set in your shell environment"
+	echo "  - Environment: Variables can be set in your shell environment"; \
+	echo "  - COMMIT_HASH is optional - if not provided, latest commit on branch will be used"
 	@if [ -n "$(MODULE_PATH)" ]; then \
 		echo "Running with MODULE_PATH=$(MODULE_PATH) (discovering steps from specific module)"; \
 	else \
@@ -32,6 +33,11 @@ docker-run:
 	else \
 		echo "DSL_OUTPUT_FILE/OUTPUT_FILE not provided, default will be used"; \
 	fi
+	@if [ -n "$(COMMIT_HASH)" ]; then \
+		echo "Using explicit COMMIT_HASH=$(COMMIT_HASH)"; \
+	else \
+		echo "COMMIT_HASH not provided, will use latest commit on branch"; \
+	fi
 	@if [ -f .env ]; then \
 		echo "Loading environment variables from .env file..."; \
 		ENV_FILE_FLAG="--env-file .env"; \
@@ -41,6 +47,7 @@ docker-run:
 	docker run --rm \
 		$$ENV_FILE_FLAG \
 		$(if $(REPO_URL),-e REPO_URL="$(REPO_URL)") \
+		$(if $(BRANCH_NAME),-e BRANCH_NAME="$(BRANCH_NAME)") \
 		$(if $(COMMIT_HASH),-e COMMIT_HASH="$(COMMIT_HASH)") \
 		$(if $(AUTH_TOKEN),-e AUTH_TOKEN="$(AUTH_TOKEN)") \
 		$(if $(MODULE_PATH),-e MODULE_PATH="$(MODULE_PATH)") \
