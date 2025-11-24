@@ -1,5 +1,7 @@
 .PHONY: venv sync proto test docker-build docker-run docker-push-reg4
 
+TAG ?= latest
+
 venv:
 	uv venv
 
@@ -13,7 +15,7 @@ test:
 	uv run pytest tests/ -v
 
 docker-build:
-	docker build -t bridge-sdk:latest .
+	docker build -t bridge-sdk:$(TAG) .
 
 docker-run:
 	@echo "Note: Required variables (REPO_URL, BRANCH_NAME, AUTH_TOKEN) can be provided via:"; \
@@ -52,7 +54,7 @@ docker-run:
 		$(if $(AUTH_TOKEN),-e AUTH_TOKEN="$(AUTH_TOKEN)") \
 		$(if $(MODULE_PATH),-e MODULE_PATH="$(MODULE_PATH)") \
 		$(if $(DSL_OUTPUT_FILE),-e DSL_OUTPUT_FILE="$(DSL_OUTPUT_FILE)") \
-		bridge-sdk:latest
+		bridge-sdk:$(TAG)
 
 docker-push-reg4:
 	@echo "Getting credentials from AWS Secrets Manager..."
@@ -63,9 +65,9 @@ docker-push-reg4:
 	echo "Logging in to $$DOCKER_SERVER..."; \
 	echo $$DOCKER_PASSWORD | docker login --username $$DOCKER_USERNAME --password-stdin $$DOCKER_SERVER; \
 	echo "Tagging image..."; \
-	docker tag bridge-sdk:latest $$DOCKER_SERVER/bridge/v1/sdk_analysis:latest; \
+	docker tag bridge-sdk:$(TAG) $$DOCKER_SERVER/bridge/v1/sdk_analysis:$(TAG); \
 	echo "Pushing image to registry..."; \
-	docker push $$DOCKER_SERVER/bridge/v1/sdk_analysis:latest
+	docker push $$DOCKER_SERVER/bridge/v1/sdk_analysis:$(TAG)
 
 docker-build-and-push-reg4:
 	make docker-build
