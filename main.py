@@ -131,6 +131,14 @@ async def cmd_run_step(args):
         result = await step.on_invoke_step(input=args.input, step_results=args.results)
         print(f"Step '{args.step}' executed successfully")
         print(f"Result: {result}")
+
+        # Write result to output file if specified
+        if args.output_file:
+            output_path = Path(args.output_file)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            # result is already a JSON string from on_invoke_step
+            output_path.write_text(result)
+            print(f"Result written to {output_path}")
     except Exception as e:
         print(f"Error executing step '{args.step}': {e}")
         import traceback
@@ -175,6 +183,10 @@ def main():
         "--modules",
         nargs="+",
         help="Module paths to discover steps from (e.g., --modules examples my_steps)",
+    )
+    run_parser.add_argument(
+        "--output-file",
+        help="Path to write the step result to",
     )
     run_parser.set_defaults(func=cmd_run_step)
 

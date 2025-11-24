@@ -1,8 +1,9 @@
 from dataclasses import dataclass
 import inspect
+import json
 from typing import Annotated, Any, Callable, get_args, get_origin, get_type_hints
 
-from pydantic import BaseModel, Field, create_model
+from pydantic import BaseModel, Field, TypeAdapter, create_model
 from pydantic.fields import FieldInfo
 
 
@@ -22,6 +23,8 @@ class FunctionSchema:
     """A map of the param name to any annotations."""
     return_json_schema: dict[str, Any]
     """The JSON schema for the function's return."""
+    return_type: Any
+    """The return type annotation of the function."""
     signature: inspect.Signature
     """The signature of the function."""
 
@@ -53,6 +56,54 @@ class FunctionSchema:
                 # For KEYWORD_ONLY parameters, always use keyword args.
                 keyword_args[name] = value
         return positional_args, keyword_args
+
+    def serialize_return_value(self, result: Any) -> str:
+        """
+        Serialize the return value of a function to JSON string.
+        Uses TypeAdapter when return type is available, with fallback for Any or failures.
+
+        Args:
+            result: The return value from the function
+
+        Returns:
+            JSON string representation of the result
+
+        Raises:
+            ValueError: If serialization fails
+        """
+        # Try TypeAdapter if we have a specific return type (not Any)
+        if self.return_type != Any:
+            try:
+                adapter = TypeAdapter(self.return_type)
+                return adapter.dump_json(result).decode("utf-8")
+            except Exception:
+                # If TypeAdapter fails, fall through to fallback serialization
+                pass
+
+        # Fallback serialization for Any type or when TypeAdapter fails
+        try:
+            # Handle Pydantic BaseModel instances
+            if isinstance(result, BaseModel):
+                return result.model_dump_json()
+            # Handle standard JSON-serializable types
+            elif isinstance(result, (dict, list, str, int, float, bool, type(None))):
+                return json.dumps(result)
+            # Try to convert to dict if it has __dict__ (e.g., dataclasses, simple objects)
+            elif hasattr(result, "__dict__"):
+                return json.dumps(result.__dict__)
+            # Try to convert to dict if it's iterable (but not a string)
+            elif hasattr(result, "__iter__") and not isinstance(result, str):
+                try:
+                    return json.dumps(list(result))
+                except (TypeError, ValueError):
+                    pass
+            # Last resort: try json.dumps directly
+            return json.dumps(result)
+        except (TypeError, ValueError) as e:
+            raise ValueError(
+                f"Failed to serialize return value for step {self.name}: {e}. "
+                f"Return type: {type(result).__name__}, Value: {result}"
+            ) from e
 
 
 def _strip_annotated(annotation: Any) -> tuple[Any, tuple[Any, ...]]:
@@ -200,5 +251,6 @@ def function_schema(func: Callable[..., Any]) -> FunctionSchema:
         params_json_schema=json_schema,
         param_annotations=param_annotations,
         return_json_schema=return_json_schema,
+        return_type=return_type,
         signature=sig,
     )

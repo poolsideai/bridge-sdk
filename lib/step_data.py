@@ -1,4 +1,4 @@
-from typing import Any, Callable, Optional, TYPE_CHECKING, Union
+from typing import Any, Optional, TYPE_CHECKING, Union
 from pydantic import BaseModel, Field
 
 from lib.function_schema import FunctionSchema

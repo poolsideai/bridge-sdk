@@ -25,10 +25,11 @@ StepFunction = Callable[StepParams, Any]
 class Step:
     step_data: StepData
     """The step data to be used in Bridge."""
-    on_invoke_step: Callable[[str, str], Awaitable[Any]]
+    on_invoke_step: Callable[[str, str], Awaitable[str]]
     """A function that invokes the step with the given parameters.
     This is called when a step is executed through the bridge CLI.
-    The arguments are to be passed as a json string
+    The arguments are to be passed as a json string.
+    Returns a JSON string representation of the result.
     """
     _original_func: Callable[..., Any]
     """The original function that was decorated. Used for direct invocation."""
@@ -117,7 +118,7 @@ def step(
             line_number=line_number,
         )
 
-        async def _on_invoke_step_impl(input: str, step_results: str) -> Any:
+        async def _on_invoke_step_impl(input: str, step_results: str) -> str:
             try:
                 input_json_data: dict[str, Any] = json.loads(input) if input else {}
             except Exception as e:
@@ -161,11 +162,13 @@ def step(
 
             logger.debug(f"Step {data.name} completed.")
 
-            # TODO(agoddijn) - Ensure result can be serialized
-            # Even better would be to ensure the result type is serializable when the
-            # step is defined, using the type annotation of the function and trying to
-            # create a pydantic TypeAdapter if the output is not already a BaseModel
-            return result
+            # Serialize the result to JSON
+            try:
+                return schema.serialize_return_value(result)
+            except (ValueError, TypeError) as e:
+                raise StepError(
+                    f"Failed to serialize return value for step {schema.name}: {e}"
+                ) from e
 
         step = Step(
             step_data=data,
