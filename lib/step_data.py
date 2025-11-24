@@ -24,7 +24,7 @@ class StepData(BaseModel):
     """The steps that this step depends on. Either a step name if defined in the same reposiory, or a step ID."""
     file_path: str | None = None
     """The file path of the step function."""
-    line_number: int | None = None
+    file_line_number: int | None = None
     """The line number of the step function."""
     params_from_step_results: dict[str, str] = Field(default_factory=dict)
     """A dictionary of param name to step name or ID, defining which steps results can be used to populate the param."""
@@ -75,7 +75,7 @@ def step_data(
         params_json_schema=function_schema.params_json_schema,
         return_json_schema=function_schema.return_json_schema,
         file_path=file_path,
-        line_number=line_number,
+        file_line_number=line_number,
         params_from_step_results=params_from_step_results_dict,
     )
 

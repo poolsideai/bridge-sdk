@@ -70,9 +70,9 @@ def test_step_data_file_path_and_line_number():
     assert step_data.file_path.startswith("tests/")
 
     # Verify line_number is set
-    assert step_data.line_number is not None
-    assert isinstance(step_data.line_number, int)
-    assert step_data.line_number > 0
+    assert step_data.file_line_number is not None
+    assert isinstance(step_data.file_line_number, int)
+    assert step_data.file_line_number > 0
 
 
 def test_step_data_all_fields():
@@ -100,7 +100,7 @@ def test_step_data_all_fields():
     assert step_data.sandbox_id == "test-sandbox"
     assert step_data.depends_on == ["step1", "step2"]
     assert step_data.file_path is not None
-    assert step_data.line_number is not None
+    assert step_data.file_line_number is not None
 
 
 def test_multiple_steps_different_locations():
@@ -128,13 +128,13 @@ def test_multiple_steps_different_locations():
     assert step_b_data.file_path is not None
 
     # Both should have line numbers
-    assert step_a_data.line_number is not None
-    assert step_b_data.line_number is not None
+    assert step_a_data.file_line_number is not None
+    assert step_b_data.file_line_number is not None
 
     # Line numbers should be different
-    assert step_a_data.line_number != step_b_data.line_number
+    assert step_a_data.file_line_number != step_b_data.file_line_number
     # step_b should be defined after step_a
-    assert step_b_data.line_number > step_a_data.line_number
+    assert step_b_data.file_line_number > step_a_data.file_line_number
 
 
 def test_exact_file_path_resolution():
@@ -179,10 +179,10 @@ def test_exact_line_number_resolution():
     actual_line_number = inspect.getsourcelines(step_record._original_func)[1]
 
     # Verify the captured line number matches what inspect reports
-    assert step_data.line_number == actual_line_number
+    assert step_data.file_line_number == actual_line_number
 
     # Verify it's the line where 'def' appears, not the decorator
-    assert step_data.line_number > 0
+    assert step_data.file_line_number > 0
 
 
 def test_line_number_with_decorator():
@@ -202,7 +202,7 @@ def test_line_number_with_decorator():
     actual_line_number = inspect.getsourcelines(step_record._original_func)[1]
 
     # Line number should be the function definition line, not decorator line
-    assert step_data.line_number == actual_line_number
+    assert step_data.file_line_number == actual_line_number
     # The line number should be greater than where the decorator is
     # (decorator is on line before function definition)
 
@@ -227,7 +227,7 @@ def test_line_number_with_multiline_decorator():
     actual_line_number = inspect.getsourcelines(step_record._original_func)[1]
 
     # Line number should still be correct
-    assert step_data.line_number == actual_line_number
+    assert step_data.file_line_number == actual_line_number
 
 
 def test_file_path_consistency_across_steps():
@@ -256,8 +256,8 @@ def test_file_path_consistency_across_steps():
     assert step1_data.file_path == "tests/test_step.py"
 
     # But different line numbers
-    assert step1_data.line_number != step2_data.line_number
-    assert step2_data.line_number != step3_data.line_number
+    assert step1_data.file_line_number != step2_data.file_line_number
+    assert step2_data.file_line_number != step3_data.file_line_number
 
 
 def test_line_number_ordering():
@@ -281,9 +281,9 @@ def test_line_number_ordering():
     third_data = STEP_REGISTRY["order_test_third"].step_data
 
     # Line numbers should be in ascending order
-    assert first_data.line_number < second_data.line_number
-    assert second_data.line_number < third_data.line_number
-    assert first_data.line_number < third_data.line_number
+    assert first_data.file_line_number < second_data.file_line_number
+    assert second_data.file_line_number < third_data.file_line_number
+    assert first_data.file_line_number < third_data.file_line_number
 
 
 def test_file_path_resolution_in_sandbox_environment():
@@ -355,8 +355,8 @@ def sandbox_test_function():
             assert not Path(step_data.file_path).is_absolute()
 
             # Verify line_number is also set correctly
-            assert step_data.line_number is not None
-            assert step_data.line_number > 0
+            assert step_data.file_line_number is not None
+            assert step_data.file_line_number > 0
 
         finally:
             # Clean up
