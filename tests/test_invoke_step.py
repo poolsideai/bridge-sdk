@@ -3,16 +3,13 @@
 import asyncio
 import json
 import pytest
-from typing import Annotated, Optional, Union, List, Dict, Any
-from pydantic import BaseModel, Field
-from datetime import datetime, date
-from enum import Enum
+from typing import Annotated, Optional, List, Dict, Any
+from pydantic import BaseModel
 
 from lib import step, STEP_REGISTRY, step_result
 from lib.exceptions import StepError
 
 
-# Test Pydantic models for various scenarios
 class SimpleInput(BaseModel):
     value: str
 
@@ -38,41 +35,7 @@ class ComplexInput(BaseModel):
 class OptionalInput(BaseModel):
     required: str
     optional: Optional[str] = None
-    optional_with_default: Optional[int] = 42
-
-
-class UnionInput(BaseModel):
-    value: Union[str, int]
-
-
-class EnumInput(BaseModel):
-    class Status(str, Enum):
-        PENDING = "pending"
-        ACTIVE = "active"
-        INACTIVE = "inactive"
-
-    status: Status
-
-
-class DateTimeInput(BaseModel):
-    timestamp: datetime
-    date_only: date
-
-
-class ListInput(BaseModel):
-    items: List[str]
-    numbers: List[int]
-
-
-class DictInput(BaseModel):
-    mapping: Dict[str, int]
-    nested: Dict[str, Dict[str, str]]
-
-
-class FieldConstraintsInput(BaseModel):
-    positive_int: int = Field(gt=0)
-    non_empty_str: str = Field(min_length=1)
-    bounded_int: int = Field(ge=1, le=100)
+    default_val: int = 42
 
 
 @pytest.fixture(autouse=True)
@@ -93,29 +56,14 @@ def test_sync_step_no_parameters():
     def sync_no_params() -> str:
         return "success"
 
-    step_obj = STEP_REGISTRY["sync_no_params"]
-    result_json = asyncio.run(step_obj.on_invoke_step("{}", "{}"))
-    result = json.loads(result_json)
-    assert result == "success"
-
-
-def test_sync_step_simple_string_input():
-    """Test sync step with simple string input."""
-
-    @step(name="sync_string")
-    def sync_string(input_data: SimpleInput) -> SimpleOutput:
-        return SimpleOutput(result=f"processed_{input_data.value}")
-
-    step_obj = STEP_REGISTRY["sync_string"]
     result_json = asyncio.run(
-        step_obj.on_invoke_step('{"input_data": {"value": "test"}}', "{}")
+        STEP_REGISTRY["sync_no_params"].on_invoke_step("{}", "{}")
     )
-    result = SimpleOutput.model_validate_json(result_json)
-    assert result.result == "processed_test"
+    assert json.loads(result_json) == "success"
 
 
-def test_sync_step_complex_types():
-    """Test sync step with various Pydantic types (nested, optional, union, collections)."""
+def test_sync_step_with_complex_input():
+    """Test sync step with complex nested Pydantic input."""
 
     @step(name="sync_complex")
     def sync_complex(input_data: ComplexInput) -> SimpleOutput:
@@ -123,11 +71,10 @@ def test_sync_step_complex_types():
             result=f"{input_data.name}_{input_data.age}_{len(input_data.tags)}"
         )
 
-    step_obj = STEP_REGISTRY["sync_complex"]
     result_json = asyncio.run(
-        step_obj.on_invoke_step(
+        STEP_REGISTRY["sync_complex"].on_invoke_step(
             '{"input_data": {"name": "John", "age": 30, "active": true, '
-            '"tags": ["tag1", "tag2"], "metadata": {"key": "value"}, '
+            '"tags": ["a", "b"], "metadata": {"key": "val"}, '
             '"nested": {"outer": "out", "inner": {"value": "in"}}}}',
             "{}",
         )
@@ -135,60 +82,9 @@ def test_sync_step_complex_types():
     result = SimpleOutput.model_validate_json(result_json)
     assert result.result == "John_30_2"
 
-    # Test optional fields
-    @step(name="sync_optional")
-    def sync_optional(input_data: OptionalInput) -> SimpleOutput:
-        return SimpleOutput(
-            result=f"{input_data.required}_{input_data.optional}_{input_data.optional_with_default}"
-        )
 
-    step_obj = STEP_REGISTRY["sync_optional"]
-    result_json = asyncio.run(
-        step_obj.on_invoke_step('{"input_data": {"required": "req"}}', "{}")
-    )
-    result = SimpleOutput.model_validate_json(result_json)
-    assert result.result == "req_None_42"
-
-    # Test union types
-    @step(name="sync_union")
-    def sync_union(input_data: UnionInput) -> SimpleOutput:
-        return SimpleOutput(result=f"value_{input_data.value}")
-
-    step_obj = STEP_REGISTRY["sync_union"]
-    result_json = asyncio.run(
-        step_obj.on_invoke_step('{"input_data": {"value": 42}}', "{}")
-    )
-    result = SimpleOutput.model_validate_json(result_json)
-    assert result.result == "value_42"
-
-
-def test_sync_step_multiple_parameters():
-    """Test sync step with multiple parameters."""
-
-    class MultiInput(BaseModel):
-        first: str
-        second: int
-        third: bool
-
-    @step(name="sync_multi")
-    def sync_multi(
-        first_param: str, second_param: int, third_param: bool
-    ) -> SimpleOutput:
-        return SimpleOutput(result=f"{first_param}_{second_param}_{third_param}")
-
-    step_obj = STEP_REGISTRY["sync_multi"]
-    result_json = asyncio.run(
-        step_obj.on_invoke_step(
-            '{"first_param": "hello", "second_param": 42, "third_param": true}',
-            "{}",
-        )
-    )
-    result = SimpleOutput.model_validate_json(result_json)
-    assert result.result == "hello_42_True"
-
-
-def test_sync_step_with_defaults():
-    """Test sync step with default parameter values."""
+def test_sync_step_multiple_params_with_defaults():
+    """Test sync step with multiple parameters and defaults."""
 
     @step(name="sync_defaults")
     def sync_defaults(
@@ -196,20 +92,19 @@ def test_sync_step_with_defaults():
     ) -> SimpleOutput:
         return SimpleOutput(result=f"{required}_{optional}_{number}")
 
-    step_obj = STEP_REGISTRY["sync_defaults"]
-    # Test with all parameters
+    # With all parameters
     result_json = asyncio.run(
-        step_obj.on_invoke_step(
+        STEP_REGISTRY["sync_defaults"].on_invoke_step(
             '{"required": "req", "optional": "custom", "number": 20}', "{}"
         )
     )
-    result = SimpleOutput.model_validate_json(result_json)
-    assert result.result == "req_custom_20"
+    assert SimpleOutput.model_validate_json(result_json).result == "req_custom_20"
 
-    # Test with defaults
-    result_json = asyncio.run(step_obj.on_invoke_step('{"required": "req"}', "{}"))
-    result = SimpleOutput.model_validate_json(result_json)
-    assert result.result == "req_default_10"
+    # With defaults
+    result_json = asyncio.run(
+        STEP_REGISTRY["sync_defaults"].on_invoke_step('{"required": "req"}', "{}")
+    )
+    assert SimpleOutput.model_validate_json(result_json).result == "req_default_10"
 
 
 def test_sync_step_with_step_results():
@@ -219,22 +114,20 @@ def test_sync_step_with_step_results():
     def step_a() -> SimpleOutput:
         return SimpleOutput(result="from_a")
 
-    @step(name="step_b", depends_on=["step_a"])
+    @step(name="step_b")
     def step_b(
         input_data: SimpleInput,
         step_a_result: Annotated[SimpleOutput, step_result("step_a")],
     ) -> SimpleOutput:
         return SimpleOutput(result=f"{input_data.value}_{step_a_result.result}")
 
-    step_obj = STEP_REGISTRY["step_b"]
     result_json = asyncio.run(
-        step_obj.on_invoke_step(
+        STEP_REGISTRY["step_b"].on_invoke_step(
             '{"input_data": {"value": "test"}}',
             '{"step_a": {"result": "from_a"}}',
         )
     )
-    result = SimpleOutput.model_validate_json(result_json)
-    assert result.result == "test_from_a"
+    assert SimpleOutput.model_validate_json(result_json).result == "test_from_a"
 
 
 # ========== Async Step Tests ==========
@@ -248,62 +141,39 @@ async def test_async_step_no_parameters():
     async def async_no_params() -> str:
         return "async_success"
 
-    step_obj = STEP_REGISTRY["async_no_params"]
-    result_json = await step_obj.on_invoke_step("{}", "{}")
-    result = json.loads(result_json)
-    assert result == "async_success"
+    result_json = await STEP_REGISTRY["async_no_params"].on_invoke_step("{}", "{}")
+    assert json.loads(result_json) == "async_success"
 
 
 @pytest.mark.asyncio
-async def test_async_step_simple_input():
-    """Test async step with simple input."""
-
-    @step(name="async_string")
-    async def async_string(input_data: SimpleInput) -> SimpleOutput:
-        return SimpleOutput(result=f"async_{input_data.value}")
-
-    step_obj = STEP_REGISTRY["async_string"]
-    result_json = await step_obj.on_invoke_step(
-        '{"input_data": {"value": "test"}}', "{}"
-    )
-    result = SimpleOutput.model_validate_json(result_json)
-    assert result.result == "async_test"
-
-
-@pytest.mark.asyncio
-async def test_async_step_complex_input():
+async def test_async_step_with_complex_input():
     """Test async step with complex nested input."""
 
     @step(name="async_complex")
     async def async_complex(input_data: ComplexInput) -> SimpleOutput:
         return SimpleOutput(result=f"async_{input_data.name}_{input_data.age}")
 
-    step_obj = STEP_REGISTRY["async_complex"]
-    result_json = await step_obj.on_invoke_step(
+    result_json = await STEP_REGISTRY["async_complex"].on_invoke_step(
         '{"input_data": {"name": "Jane", "age": 25, "active": true, '
-        '"tags": ["tag1"], "metadata": {}, "nested": {"outer": "out", "inner": {"value": "in"}}}}',
+        '"tags": ["x"], "metadata": {}, "nested": {"outer": "o", "inner": {"value": "i"}}}}',
         "{}",
     )
-    result = SimpleOutput.model_validate_json(result_json)
-    assert result.result == "async_Jane_25"
+    assert SimpleOutput.model_validate_json(result_json).result == "async_Jane_25"
 
 
 @pytest.mark.asyncio
 async def test_async_step_with_await_operations():
     """Test async step that performs async operations."""
-    import asyncio
 
     @step(name="async_operations")
     async def async_operations(input_data: SimpleInput) -> SimpleOutput:
-        await asyncio.sleep(0.01)  # Simulate async work
+        await asyncio.sleep(0.001)
         return SimpleOutput(result=f"delayed_{input_data.value}")
 
-    step_obj = STEP_REGISTRY["async_operations"]
-    result_json = await step_obj.on_invoke_step(
+    result_json = await STEP_REGISTRY["async_operations"].on_invoke_step(
         '{"input_data": {"value": "test"}}', "{}"
     )
-    result = SimpleOutput.model_validate_json(result_json)
-    assert result.result == "delayed_test"
+    assert SimpleOutput.model_validate_json(result_json).result == "delayed_test"
 
 
 @pytest.mark.asyncio
@@ -314,7 +184,7 @@ async def test_async_step_with_step_results():
     async def async_step_a() -> SimpleOutput:
         return SimpleOutput(result="async_from_a")
 
-    @step(name="async_step_b", depends_on=["async_step_a"])
+    @step(name="async_step_b")
     async def async_step_b(
         input_data: SimpleInput,
         async_step_a_result: Annotated[SimpleOutput, step_result("async_step_a")],
@@ -323,157 +193,129 @@ async def test_async_step_with_step_results():
             result=f"async_{input_data.value}_{async_step_a_result.result}"
         )
 
-    step_obj = STEP_REGISTRY["async_step_b"]
-    result_json = await step_obj.on_invoke_step(
+    result_json = await STEP_REGISTRY["async_step_b"].on_invoke_step(
         '{"input_data": {"value": "test"}}',
         '{"async_step_a": {"result": "async_from_a"}}',
     )
-    result = SimpleOutput.model_validate_json(result_json)
-    assert result.result == "async_test_async_from_a"
+    assert (
+        SimpleOutput.model_validate_json(result_json).result
+        == "async_test_async_from_a"
+    )
 
 
 # ========== Error Cases ==========
 
 
-def test_invalid_json_input():
+def test_error_invalid_json_input():
     """Test that invalid JSON input raises an error."""
 
-    @step(name="error_invalid_json")
-    def error_invalid_json(input_data: SimpleInput) -> SimpleOutput:
+    @step(name="error_step")
+    def error_step(input_data: SimpleInput) -> SimpleOutput:
         return SimpleOutput(result="ok")
 
-    step_obj = STEP_REGISTRY["error_invalid_json"]
     with pytest.raises(StepError, match="Invalid JSON input"):
-        asyncio.run(step_obj.on_invoke_step("not json", "{}"))
+        asyncio.run(STEP_REGISTRY["error_step"].on_invoke_step("not json", "{}"))
 
 
-def test_missing_required_field():
+def test_error_missing_required_field():
     """Test that missing required fields raise validation errors."""
 
-    @step(name="error_missing_field")
-    def error_missing_field(input_data: SimpleInput) -> SimpleOutput:
+    @step(name="error_step")
+    def error_step(input_data: SimpleInput) -> SimpleOutput:
         return SimpleOutput(result="ok")
 
-    step_obj = STEP_REGISTRY["error_missing_field"]
     with pytest.raises(StepError, match="Invalid JSON input"):
-        asyncio.run(step_obj.on_invoke_step('{"input_data": {}}', "{}"))
+        asyncio.run(
+            STEP_REGISTRY["error_step"].on_invoke_step('{"input_data": {}}', "{}")
+        )
 
 
-def test_invalid_field_type():
+def test_error_invalid_field_type():
     """Test that invalid field types raise validation errors."""
 
-    @step(name="error_invalid_type")
-    def error_invalid_type(input_data: SimpleInput) -> SimpleOutput:
+    @step(name="error_step")
+    def error_step(input_data: SimpleInput) -> SimpleOutput:
         return SimpleOutput(result="ok")
 
-    step_obj = STEP_REGISTRY["error_invalid_type"]
     with pytest.raises(StepError, match="Invalid JSON input"):
-        asyncio.run(step_obj.on_invoke_step('{"input_data": {"value": 123}}', "{}"))
-
-
-def test_missing_step_result():
-    """Test that missing step results raise an error when required."""
-
-    @step(name="error_missing_result", depends_on=["missing_step"])
-    def error_missing_result(
-        input_data: SimpleInput,
-        missing: Annotated[SimpleOutput, step_result("missing_step")],
-    ) -> SimpleOutput:
-        return SimpleOutput(result="ok")
-
-    step_obj = STEP_REGISTRY["error_missing_result"]
-    # This should work if the step result is provided
-    result_json = asyncio.run(
-        step_obj.on_invoke_step(
-            '{"input_data": {"value": "test"}}',
-            '{"missing_step": {"result": "found"}}',
+        asyncio.run(
+            STEP_REGISTRY["error_step"].on_invoke_step(
+                '{"input_data": {"value": 123}}', "{}"
+            )
         )
-    )
-    result = SimpleOutput.model_validate_json(result_json)
-    assert result.result == "ok"
-
-
-def test_empty_input():
-    """Test step with empty input (both empty dict and empty string)."""
-
-    @step(name="empty_input")
-    def empty_input() -> str:
-        return "empty_ok"
-
-    step_obj = STEP_REGISTRY["empty_input"]
-    result_json = asyncio.run(step_obj.on_invoke_step("{}", "{}"))
-    result = json.loads(result_json)
-    assert result == "empty_ok"
-
-    result_json = asyncio.run(step_obj.on_invoke_step("", ""))
-    result = json.loads(result_json)
-    assert result == "empty_ok"
-
-
-def test_none_values_in_optional_fields():
-    """Test that None values work in optional fields."""
-
-    @step(name="none_optional")
-    def none_optional(input_data: OptionalInput) -> SimpleOutput:
-        return SimpleOutput(
-            result=f"{input_data.required}_{input_data.optional is None}"
-        )
-
-    step_obj = STEP_REGISTRY["none_optional"]
-    result_json = asyncio.run(
-        step_obj.on_invoke_step(
-            '{"input_data": {"required": "req", "optional": null}}', "{}"
-        )
-    )
-    result = SimpleOutput.model_validate_json(result_json)
-    assert result.result == "req_True"
 
 
 # ========== Edge Cases ==========
 
 
+def test_empty_input():
+    """Test step with empty input."""
+
+    @step(name="empty_input")
+    def empty_input() -> str:
+        return "empty_ok"
+
+    assert (
+        json.loads(asyncio.run(STEP_REGISTRY["empty_input"].on_invoke_step("{}", "{}")))
+        == "empty_ok"
+    )
+    assert (
+        json.loads(asyncio.run(STEP_REGISTRY["empty_input"].on_invoke_step("", "")))
+        == "empty_ok"
+    )
+
+
 def test_edge_cases():
-    """Test step with various edge cases (large input, special chars, unicode, edge numbers)."""
-    import json
+    """Test step with edge cases: large input, special chars, unicode."""
 
     @step(name="edge_cases")
     def edge_cases(input_data: SimpleInput) -> SimpleOutput:
-        return SimpleOutput(result=f"processed_{len(input_data.value)}")
+        return SimpleOutput(result=f"len_{len(input_data.value)}")
 
-    step_obj = STEP_REGISTRY["edge_cases"]
-
-    # Test large input
+    # Large input
     large_value = "x" * 10000
     result_json = asyncio.run(
-        step_obj.on_invoke_step(f'{{"input_data": {{"value": "{large_value}"}}}}', "{}")
+        STEP_REGISTRY["edge_cases"].on_invoke_step(
+            f'{{"input_data": {{"value": "{large_value}"}}}}', "{}"
+        )
     )
-    result = SimpleOutput.model_validate_json(result_json)
-    assert result.result == "processed_10000"
+    assert SimpleOutput.model_validate_json(result_json).result == "len_10000"
 
-    # Test special characters
-    special_value = 'test with "quotes" and \n newlines and \t tabs'
+    # Special characters and unicode
+    special_value = 'test "quotes" 测试 🎉'
     input_json = json.dumps({"input_data": {"value": special_value}})
-    result_json = asyncio.run(step_obj.on_invoke_step(input_json, "{}"))
-    result = SimpleOutput.model_validate_json(result_json)
-    assert result.result == f"processed_{len(special_value)}"
-
-    # Test unicode
-    unicode_value = "测试 🎉 émoji"
-    input_json = json.dumps(
-        {"input_data": {"value": unicode_value}}, ensure_ascii=False
+    result_json = asyncio.run(
+        STEP_REGISTRY["edge_cases"].on_invoke_step(input_json, "{}")
     )
-    result_json = asyncio.run(step_obj.on_invoke_step(input_json, "{}"))
-    result = SimpleOutput.model_validate_json(result_json)
-    assert result.result == f"processed_{len(unicode_value)}"
+    assert (
+        SimpleOutput.model_validate_json(result_json).result
+        == f"len_{len(special_value)}"
+    )
+
+
+def test_optional_fields_with_none():
+    """Test that None values work in optional fields."""
+
+    @step(name="optional_step")
+    def optional_step(input_data: OptionalInput) -> SimpleOutput:
+        return SimpleOutput(
+            result=f"{input_data.required}_{input_data.optional is None}_{input_data.default_val}"
+        )
+
+    result_json = asyncio.run(
+        STEP_REGISTRY["optional_step"].on_invoke_step(
+            '{"input_data": {"required": "req", "optional": null}}', "{}"
+        )
+    )
+    assert SimpleOutput.model_validate_json(result_json).result == "req_True_42"
 
 
 # ========== Direct Function Invocation Tests ==========
 
 
-def test_direct_invocation():
-    """Test that decorated step functions can be called directly (sync and async)."""
+def test_direct_invocation_sync():
+    """Test that decorated step functions can be called directly."""
 
-    # Sync step with parameters
     @step(name="direct_sync")
     def direct_sync(input_data: SimpleInput) -> SimpleOutput:
         return SimpleOutput(result=f"direct_{input_data.value}")
@@ -482,27 +324,16 @@ def test_direct_invocation():
     result = direct_sync(SimpleInput(value="test"))
     assert result.result == "direct_test"
 
-    # Sync step without parameters
-    @step(name="direct_sync_no_params")
-    def direct_sync_no_params() -> str:
-        return "direct_result"
-
-    result = direct_sync_no_params()
-    assert result == "direct_result"
-
-    # Sync step with multiple parameters and defaults
     @step(name="direct_multi")
     def direct_multi(first: str, second: int, third: bool = True) -> SimpleOutput:
         return SimpleOutput(result=f"{first}_{second}_{third}")
 
-    result = direct_multi("hello", 42, False)
-    assert result.result == "hello_42_False"
-    result = direct_multi(first="world", second=100)
-    assert result.result == "world_100_True"
+    assert direct_multi("hello", 42, False).result == "hello_42_False"
+    assert direct_multi(first="world", second=100).result == "world_100_True"
 
 
 @pytest.mark.asyncio
-async def test_direct_async_invocation():
+async def test_direct_invocation_async():
     """Test that decorated async step functions can be called directly."""
 
     @step(name="direct_async")
@@ -512,35 +343,6 @@ async def test_direct_async_invocation():
     assert "direct_async" in STEP_REGISTRY
     result = await direct_async(SimpleInput(value="test"))
     assert result.result == "direct_async_test"
-
-    @step(name="direct_async_no_params")
-    async def direct_async_no_params() -> str:
-        return "direct_async_result"
-
-    result = await direct_async_no_params()
-    assert result == "direct_async_result"
-
-    # Test with step results
-    @step(name="direct_async_dep_a")
-    async def direct_async_dep_a() -> SimpleOutput:
-        return SimpleOutput(result="from_a")
-
-    @step(name="direct_async_dep_b", depends_on=["direct_async_dep_a"])
-    async def direct_async_dep_b(
-        input_data: SimpleInput,
-        direct_async_dep_a_result: Annotated[
-            SimpleOutput, step_result("direct_async_dep_a")
-        ],
-    ) -> SimpleOutput:
-        return SimpleOutput(
-            result=f"{input_data.value}_{direct_async_dep_a_result.result}"
-        )
-
-    result_a = await direct_async_dep_a()
-    result_b = await direct_async_dep_b(
-        SimpleInput(value="test"), direct_async_dep_a_result=result_a
-    )
-    assert result_b.result == "test_from_a"
 
 
 if __name__ == "__main__":

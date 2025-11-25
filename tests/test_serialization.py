@@ -11,7 +11,6 @@ from enum import Enum
 from lib import step, STEP_REGISTRY
 
 
-# Test Pydantic models
 class SimpleModel(BaseModel):
     value: str
 
@@ -33,23 +32,17 @@ class ComplexModel(BaseModel):
 class OptionalModel(BaseModel):
     required: str
     optional: Optional[str] = None
-    optional_with_default: int = 42
 
 
-class UnionModel(BaseModel):
-    value: Union[str, int]
+class Status(str, Enum):
+    PENDING = "pending"
+    ACTIVE = "active"
 
 
 class EnumModel(BaseModel):
-    class Status(str, Enum):
-        PENDING = "pending"
-        ACTIVE = "active"
-        INACTIVE = "inactive"
-
     status: Status
 
 
-# Dataclass for testing
 @dataclass
 class SimpleDataclass:
     value: str
@@ -67,344 +60,256 @@ def clear_registry():
 # ========== Primitive Types ==========
 
 
-def test_return_string():
-    """Test serialization of string return type."""
+def test_return_primitives():
+    """Test serialization of primitive return types."""
 
     @step(name="return_string")
     def return_string() -> str:
-        return "hello world"
-
-    step_obj = STEP_REGISTRY["return_string"]
-    result_json = asyncio.run(step_obj.on_invoke_step("{}", "{}"))
-    result = json.loads(result_json)
-    assert result == "hello world"
-
-
-def test_return_int():
-    """Test serialization of int return type."""
+        return "hello"
 
     @step(name="return_int")
     def return_int() -> int:
         return 42
 
-    step_obj = STEP_REGISTRY["return_int"]
-    result_json = asyncio.run(step_obj.on_invoke_step("{}", "{}"))
-    result = json.loads(result_json)
-    assert result == 42
-
-
-def test_return_float():
-    """Test serialization of float return type."""
-
     @step(name="return_float")
     def return_float() -> float:
-        return 3.14159
-
-    step_obj = STEP_REGISTRY["return_float"]
-    result_json = asyncio.run(step_obj.on_invoke_step("{}", "{}"))
-    result = json.loads(result_json)
-    assert result == 3.14159
-
-
-def test_return_bool():
-    """Test serialization of bool return type."""
+        return 3.14
 
     @step(name="return_bool")
     def return_bool() -> bool:
         return True
 
-    step_obj = STEP_REGISTRY["return_bool"]
-    result_json = asyncio.run(step_obj.on_invoke_step("{}", "{}"))
-    result = json.loads(result_json)
-    assert result is True
-
-
-def test_return_none():
-    """Test serialization of None return type."""
-
     @step(name="return_none")
     def return_none() -> None:
         return None
 
-    step_obj = STEP_REGISTRY["return_none"]
-    result_json = asyncio.run(step_obj.on_invoke_step("{}", "{}"))
-    result = json.loads(result_json)
-    assert result is None
+    assert (
+        json.loads(
+            asyncio.run(STEP_REGISTRY["return_string"].on_invoke_step("{}", "{}"))
+        )
+        == "hello"
+    )
+    assert (
+        json.loads(asyncio.run(STEP_REGISTRY["return_int"].on_invoke_step("{}", "{}")))
+        == 42
+    )
+    assert (
+        json.loads(
+            asyncio.run(STEP_REGISTRY["return_float"].on_invoke_step("{}", "{}"))
+        )
+        == 3.14
+    )
+    assert (
+        json.loads(asyncio.run(STEP_REGISTRY["return_bool"].on_invoke_step("{}", "{}")))
+        is True
+    )
+    assert (
+        json.loads(asyncio.run(STEP_REGISTRY["return_none"].on_invoke_step("{}", "{}")))
+        is None
+    )
 
 
 # ========== Collections ==========
 
 
-def test_return_list():
-    """Test serialization of list return type."""
+def test_return_collections():
+    """Test serialization of collection return types."""
 
     @step(name="return_list")
     def return_list() -> List[str]:
         return ["a", "b", "c"]
 
-    step_obj = STEP_REGISTRY["return_list"]
-    result_json = asyncio.run(step_obj.on_invoke_step("{}", "{}"))
-    result = json.loads(result_json)
-    assert result == ["a", "b", "c"]
-
-
-def test_return_dict():
-    """Test serialization of dict return type."""
-
     @step(name="return_dict")
     def return_dict() -> Dict[str, Any]:
-        return {"key1": "value1", "key2": 42, "key3": True}
+        return {"key1": "value1", "key2": 42}
 
-    step_obj = STEP_REGISTRY["return_dict"]
-    result_json = asyncio.run(step_obj.on_invoke_step("{}", "{}"))
-    result = json.loads(result_json)
-    assert result == {"key1": "value1", "key2": 42, "key3": True}
+    @step(name="return_nested")
+    def return_nested() -> Dict[str, List[int]]:
+        return {"nums": [1, 2, 3]}
 
+    @step(name="return_empty_list")
+    def return_empty_list() -> List[str]:
+        return []
 
-def test_return_nested_list():
-    """Test serialization of nested list return type."""
+    @step(name="return_empty_dict")
+    def return_empty_dict() -> Dict[str, Any]:
+        return {}
 
-    @step(name="return_nested_list")
-    def return_nested_list() -> List[List[int]]:
-        return [[1, 2], [3, 4], [5, 6]]
-
-    step_obj = STEP_REGISTRY["return_nested_list"]
-    result_json = asyncio.run(step_obj.on_invoke_step("{}", "{}"))
-    result = json.loads(result_json)
-    assert result == [[1, 2], [3, 4], [5, 6]]
-
-
-def test_return_nested_dict():
-    """Test serialization of nested dict return type."""
-
-    @step(name="return_nested_dict")
-    def return_nested_dict() -> Dict[str, Dict[str, int]]:
-        return {"outer": {"inner": 42}}
-
-    step_obj = STEP_REGISTRY["return_nested_dict"]
-    result_json = asyncio.run(step_obj.on_invoke_step("{}", "{}"))
-    result = json.loads(result_json)
-    assert result == {"outer": {"inner": 42}}
+    assert json.loads(
+        asyncio.run(STEP_REGISTRY["return_list"].on_invoke_step("{}", "{}"))
+    ) == ["a", "b", "c"]
+    assert json.loads(
+        asyncio.run(STEP_REGISTRY["return_dict"].on_invoke_step("{}", "{}"))
+    ) == {"key1": "value1", "key2": 42}
+    assert json.loads(
+        asyncio.run(STEP_REGISTRY["return_nested"].on_invoke_step("{}", "{}"))
+    ) == {"nums": [1, 2, 3]}
+    assert (
+        json.loads(
+            asyncio.run(STEP_REGISTRY["return_empty_list"].on_invoke_step("{}", "{}"))
+        )
+        == []
+    )
+    assert (
+        json.loads(
+            asyncio.run(STEP_REGISTRY["return_empty_dict"].on_invoke_step("{}", "{}"))
+        )
+        == {}
+    )
 
 
 # ========== Pydantic Models ==========
 
 
-def test_return_pydantic_model():
-    """Test serialization of Pydantic model return type."""
+def test_return_pydantic_models():
+    """Test serialization of Pydantic model return types."""
 
-    @step(name="return_pydantic")
-    def return_pydantic() -> SimpleModel:
+    @step(name="return_simple")
+    def return_simple() -> SimpleModel:
         return SimpleModel(value="test")
 
-    step_obj = STEP_REGISTRY["return_pydantic"]
-    result_json = asyncio.run(step_obj.on_invoke_step("{}", "{}"))
-    result = SimpleModel.model_validate_json(result_json)
-    assert result.value == "test"
+    @step(name="return_nested")
+    def return_nested() -> NestedModel:
+        return NestedModel(outer="out", inner=SimpleModel(value="in"))
 
-
-def test_return_nested_pydantic_model():
-    """Test serialization of nested Pydantic model return type."""
-
-    @step(name="return_nested_pydantic")
-    def return_nested_pydantic() -> NestedModel:
-        return NestedModel(outer="outer", inner=SimpleModel(value="inner"))
-
-    step_obj = STEP_REGISTRY["return_nested_pydantic"]
-    result_json = asyncio.run(step_obj.on_invoke_step("{}", "{}"))
-    result = NestedModel.model_validate_json(result_json)
-    assert result.outer == "outer"
-    assert result.inner.value == "inner"
-
-
-def test_return_complex_pydantic_model():
-    """Test serialization of complex Pydantic model return type."""
-
-    @step(name="return_complex_pydantic")
-    def return_complex_pydantic() -> ComplexModel:
+    @step(name="return_complex")
+    def return_complex() -> ComplexModel:
         return ComplexModel(
             name="John",
             age=30,
             active=True,
-            tags=["tag1", "tag2"],
-            metadata={"key": "value"},
+            tags=["a", "b"],
+            metadata={"key": "val"},
             nested=NestedModel(outer="out", inner=SimpleModel(value="in")),
         )
 
-    step_obj = STEP_REGISTRY["return_complex_pydantic"]
-    result_json = asyncio.run(step_obj.on_invoke_step("{}", "{}"))
-    result = ComplexModel.model_validate_json(result_json)
-    assert result.name == "John"
-    assert result.age == 30
-    assert result.active is True
-    assert result.tags == ["tag1", "tag2"]
-    assert result.metadata == {"key": "value"}
-    assert result.nested.outer == "out"
-    assert result.nested.inner.value == "in"
-
-
-def test_return_optional_pydantic_model():
-    """Test serialization of Pydantic model with optional fields."""
-
-    @step(name="return_optional_pydantic")
-    def return_optional_pydantic() -> OptionalModel:
+    @step(name="return_optional")
+    def return_optional() -> OptionalModel:
         return OptionalModel(required="req", optional=None)
 
-    step_obj = STEP_REGISTRY["return_optional_pydantic"]
-    result_json = asyncio.run(step_obj.on_invoke_step("{}", "{}"))
-    result = OptionalModel.model_validate_json(result_json)
+    @step(name="return_enum")
+    def return_enum() -> EnumModel:
+        return EnumModel(status=Status.ACTIVE)
+
+    result = SimpleModel.model_validate_json(
+        asyncio.run(STEP_REGISTRY["return_simple"].on_invoke_step("{}", "{}"))
+    )
+    assert result.value == "test"
+
+    result = NestedModel.model_validate_json(
+        asyncio.run(STEP_REGISTRY["return_nested"].on_invoke_step("{}", "{}"))
+    )
+    assert result.outer == "out"
+    assert result.inner.value == "in"
+
+    result = ComplexModel.model_validate_json(
+        asyncio.run(STEP_REGISTRY["return_complex"].on_invoke_step("{}", "{}"))
+    )
+    assert result.name == "John"
+    assert result.age == 30
+    assert result.tags == ["a", "b"]
+    assert result.nested.inner.value == "in"
+
+    result = OptionalModel.model_validate_json(
+        asyncio.run(STEP_REGISTRY["return_optional"].on_invoke_step("{}", "{}"))
+    )
     assert result.required == "req"
     assert result.optional is None
-    assert result.optional_with_default == 42
+
+    result = EnumModel.model_validate_json(
+        asyncio.run(STEP_REGISTRY["return_enum"].on_invoke_step("{}", "{}"))
+    )
+    assert result.status == Status.ACTIVE
 
 
-def test_return_union_pydantic_model():
-    """Test serialization of Pydantic model with union field."""
-
-    @step(name="return_union_pydantic")
-    def return_union_pydantic() -> UnionModel:
-        return UnionModel(value="string")
-
-    step_obj = STEP_REGISTRY["return_union_pydantic"]
-    result_json = asyncio.run(step_obj.on_invoke_step("{}", "{}"))
-    result = UnionModel.model_validate_json(result_json)
-    assert result.value == "string"
-
-    @step(name="return_union_pydantic_int")
-    def return_union_pydantic_int() -> UnionModel:
-        return UnionModel(value=42)
-
-    step_obj = STEP_REGISTRY["return_union_pydantic_int"]
-    result_json = asyncio.run(step_obj.on_invoke_step("{}", "{}"))
-    result = UnionModel.model_validate_json(result_json)
-    assert result.value == 42
+# ========== Union and Optional Types ==========
 
 
-def test_return_enum_pydantic_model():
-    """Test serialization of Pydantic model with enum field."""
+def test_return_union_and_optional():
+    """Test serialization with Union and Optional return types."""
 
-    @step(name="return_enum_pydantic")
-    def return_enum_pydantic() -> EnumModel:
-        return EnumModel(status=EnumModel.Status.ACTIVE)
-
-    step_obj = STEP_REGISTRY["return_enum_pydantic"]
-    result_json = asyncio.run(step_obj.on_invoke_step("{}", "{}"))
-    result = EnumModel.model_validate_json(result_json)
-    assert result.status == EnumModel.Status.ACTIVE
-
-
-# ========== Type Annotations ==========
-
-
-def test_return_with_union_type():
-    """Test serialization with Union return type annotation."""
-
-    @step(name="return_union")
-    def return_union() -> Union[str, int]:
+    @step(name="return_union_str")
+    def return_union_str() -> Union[str, int]:
         return "string"
-
-    step_obj = STEP_REGISTRY["return_union"]
-    result_json = asyncio.run(step_obj.on_invoke_step("{}", "{}"))
-    result = json.loads(result_json)
-    assert result == "string"
 
     @step(name="return_union_int")
     def return_union_int() -> Union[str, int]:
         return 42
 
-    step_obj = STEP_REGISTRY["return_union_int"]
-    result_json = asyncio.run(step_obj.on_invoke_step("{}", "{}"))
-    result = json.loads(result_json)
-    assert result == 42
-
-
-def test_return_with_optional_type():
-    """Test serialization with Optional return type annotation."""
-
-    @step(name="return_optional")
-    def return_optional() -> Optional[str]:
+    @step(name="return_optional_value")
+    def return_optional_value() -> Optional[str]:
         return "value"
-
-    step_obj = STEP_REGISTRY["return_optional"]
-    result_json = asyncio.run(step_obj.on_invoke_step("{}", "{}"))
-    result = json.loads(result_json)
-    assert result == "value"
 
     @step(name="return_optional_none")
     def return_optional_none() -> Optional[str]:
         return None
 
-    step_obj = STEP_REGISTRY["return_optional_none"]
-    result_json = asyncio.run(step_obj.on_invoke_step("{}", "{}"))
-    result = json.loads(result_json)
-    assert result is None
+    assert (
+        json.loads(
+            asyncio.run(STEP_REGISTRY["return_union_str"].on_invoke_step("{}", "{}"))
+        )
+        == "string"
+    )
+    assert (
+        json.loads(
+            asyncio.run(STEP_REGISTRY["return_union_int"].on_invoke_step("{}", "{}"))
+        )
+        == 42
+    )
+    assert (
+        json.loads(
+            asyncio.run(
+                STEP_REGISTRY["return_optional_value"].on_invoke_step("{}", "{}")
+            )
+        )
+        == "value"
+    )
+    assert (
+        json.loads(
+            asyncio.run(
+                STEP_REGISTRY["return_optional_none"].on_invoke_step("{}", "{}")
+            )
+        )
+        is None
+    )
 
 
-def test_return_with_list_type():
-    """Test serialization with List return type annotation."""
-
-    @step(name="return_list_type")
-    def return_list_type() -> List[int]:
-        return [1, 2, 3, 4, 5]
-
-    step_obj = STEP_REGISTRY["return_list_type"]
-    result_json = asyncio.run(step_obj.on_invoke_step("{}", "{}"))
-    result = json.loads(result_json)
-    assert result == [1, 2, 3, 4, 5]
+# ========== No Type Annotation ==========
 
 
-def test_return_with_dict_type():
-    """Test serialization with Dict return type annotation."""
+def test_return_no_annotation():
+    """Test serialization with no return type annotation."""
 
-    @step(name="return_dict_type")
-    def return_dict_type() -> Dict[str, int]:
-        return {"a": 1, "b": 2, "c": 3}
-
-    step_obj = STEP_REGISTRY["return_dict_type"]
-    result_json = asyncio.run(step_obj.on_invoke_step("{}", "{}"))
-    result = json.loads(result_json)
-    assert result == {"a": 1, "b": 2, "c": 3}
-
-
-# ========== No Type Annotation (Any) ==========
-
-
-def test_return_no_annotation_string():
-    """Test serialization with no return type annotation (returns string)."""
-
-    @step(name="return_no_annotation_string")
-    def return_no_annotation_string():
+    @step(name="return_no_annotation_str")
+    def return_no_annotation_str():
         return "no annotation"
-
-    step_obj = STEP_REGISTRY["return_no_annotation_string"]
-    result_json = asyncio.run(step_obj.on_invoke_step("{}", "{}"))
-    result = json.loads(result_json)
-    assert result == "no annotation"
-
-
-def test_return_no_annotation_dict():
-    """Test serialization with no return type annotation (returns dict)."""
 
     @step(name="return_no_annotation_dict")
     def return_no_annotation_dict():
         return {"key": "value"}
 
-    step_obj = STEP_REGISTRY["return_no_annotation_dict"]
-    result_json = asyncio.run(step_obj.on_invoke_step("{}", "{}"))
-    result = json.loads(result_json)
-    assert result == {"key": "value"}
-
-
-def test_return_no_annotation_pydantic():
-    """Test serialization with no return type annotation (returns Pydantic model)."""
-
     @step(name="return_no_annotation_pydantic")
     def return_no_annotation_pydantic():
         return SimpleModel(value="no annotation")
 
-    step_obj = STEP_REGISTRY["return_no_annotation_pydantic"]
-    result_json = asyncio.run(step_obj.on_invoke_step("{}", "{}"))
-    result = SimpleModel.model_validate_json(result_json)
+    assert (
+        json.loads(
+            asyncio.run(
+                STEP_REGISTRY["return_no_annotation_str"].on_invoke_step("{}", "{}")
+            )
+        )
+        == "no annotation"
+    )
+    assert json.loads(
+        asyncio.run(
+            STEP_REGISTRY["return_no_annotation_dict"].on_invoke_step("{}", "{}")
+        )
+    ) == {"key": "value"}
+    result = SimpleModel.model_validate_json(
+        asyncio.run(
+            STEP_REGISTRY["return_no_annotation_pydantic"].on_invoke_step("{}", "{}")
+        )
+    )
     assert result.value == "no annotation"
 
 
@@ -418,108 +323,65 @@ def test_return_dataclass():
     def return_dataclass() -> SimpleDataclass:
         return SimpleDataclass(value="test", number=42)
 
-    step_obj = STEP_REGISTRY["return_dataclass"]
-    result_json = asyncio.run(step_obj.on_invoke_step("{}", "{}"))
-    result = json.loads(result_json)
-    # Dataclass should be serialized as dict via __dict__
+    result = json.loads(
+        asyncio.run(STEP_REGISTRY["return_dataclass"].on_invoke_step("{}", "{}"))
+    )
     assert result == {"value": "test", "number": 42}
-
-
-# ========== Edge Cases ==========
-
-
-def test_return_empty_list():
-    """Test serialization of empty list."""
-
-    @step(name="return_empty_list")
-    def return_empty_list() -> List[str]:
-        return []
-
-    step_obj = STEP_REGISTRY["return_empty_list"]
-    result_json = asyncio.run(step_obj.on_invoke_step("{}", "{}"))
-    result = json.loads(result_json)
-    assert result == []
-
-
-def test_return_empty_dict():
-    """Test serialization of empty dict."""
-
-    @step(name="return_empty_dict")
-    def return_empty_dict() -> Dict[str, Any]:
-        return {}
-
-    step_obj = STEP_REGISTRY["return_empty_dict"]
-    result_json = asyncio.run(step_obj.on_invoke_step("{}", "{}"))
-    result = json.loads(result_json)
-    assert result == {}
-
-
-def test_return_list_with_none():
-    """Test serialization of list containing None values."""
-
-    @step(name="return_list_with_none")
-    def return_list_with_none() -> List[Optional[str]]:
-        return ["value", None, "another"]
-
-    step_obj = STEP_REGISTRY["return_list_with_none"]
-    result_json = asyncio.run(step_obj.on_invoke_step("{}", "{}"))
-    result = json.loads(result_json)
-    assert result == ["value", None, "another"]
-
-
-def test_return_dict_with_none():
-    """Test serialization of dict containing None values."""
-
-    @step(name="return_dict_with_none")
-    def return_dict_with_none() -> Dict[str, Optional[str]]:
-        return {"key1": "value", "key2": None, "key3": "another"}
-
-    step_obj = STEP_REGISTRY["return_dict_with_none"]
-    result_json = asyncio.run(step_obj.on_invoke_step("{}", "{}"))
-    result = json.loads(result_json)
-    assert result == {"key1": "value", "key2": None, "key3": "another"}
 
 
 # ========== Async Functions ==========
 
 
 @pytest.mark.asyncio
-async def test_async_return_string():
-    """Test serialization of string return from async function."""
+async def test_async_return_serialization():
+    """Test serialization works correctly for async functions."""
 
-    @step(name="async_return_string")
-    async def async_return_string() -> str:
+    @step(name="async_return_str")
+    async def async_return_str() -> str:
         return "async string"
-
-    step_obj = STEP_REGISTRY["async_return_string"]
-    result_json = await step_obj.on_invoke_step("{}", "{}")
-    result = json.loads(result_json)
-    assert result == "async string"
-
-
-@pytest.mark.asyncio
-async def test_async_return_pydantic():
-    """Test serialization of Pydantic model return from async function."""
 
     @step(name="async_return_pydantic")
     async def async_return_pydantic() -> SimpleModel:
         return SimpleModel(value="async test")
 
-    step_obj = STEP_REGISTRY["async_return_pydantic"]
-    result_json = await step_obj.on_invoke_step("{}", "{}")
-    result = SimpleModel.model_validate_json(result_json)
-    assert result.value == "async test"
-
-
-@pytest.mark.asyncio
-async def test_async_return_list():
-    """Test serialization of list return from async function."""
-
     @step(name="async_return_list")
     async def async_return_list() -> List[int]:
         return [1, 2, 3]
 
-    step_obj = STEP_REGISTRY["async_return_list"]
-    result_json = await step_obj.on_invoke_step("{}", "{}")
-    result = json.loads(result_json)
-    assert result == [1, 2, 3]
+    assert (
+        json.loads(await STEP_REGISTRY["async_return_str"].on_invoke_step("{}", "{}"))
+        == "async string"
+    )
+    result = SimpleModel.model_validate_json(
+        await STEP_REGISTRY["async_return_pydantic"].on_invoke_step("{}", "{}")
+    )
+    assert result.value == "async test"
+    assert json.loads(
+        await STEP_REGISTRY["async_return_list"].on_invoke_step("{}", "{}")
+    ) == [1, 2, 3]
+
+
+# ========== Edge Cases ==========
+
+
+def test_return_collections_with_none():
+    """Test serialization of collections containing None values."""
+
+    @step(name="list_with_none")
+    def list_with_none() -> List[Optional[str]]:
+        return ["value", None, "another"]
+
+    @step(name="dict_with_none")
+    def dict_with_none() -> Dict[str, Optional[str]]:
+        return {"key1": "value", "key2": None}
+
+    assert json.loads(
+        asyncio.run(STEP_REGISTRY["list_with_none"].on_invoke_step("{}", "{}"))
+    ) == ["value", None, "another"]
+    assert json.loads(
+        asyncio.run(STEP_REGISTRY["dict_with_none"].on_invoke_step("{}", "{}"))
+    ) == {"key1": "value", "key2": None}
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

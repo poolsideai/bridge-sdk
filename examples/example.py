@@ -37,7 +37,6 @@ class Step2Output(BaseModel):
     setup_script="clone_repo.sh",
     post_execution_script="push_to_git.sh",
     metadata={"type": "agent"},
-    depends_on=[step_1],
 )
 def step_2(
     input_data: Step2Input,
@@ -58,7 +57,6 @@ class Step3Output(BaseModel):
 @step(
     setup_script="clone_repo.sh",
     post_execution_script="push_to_git.sh",
-    depends_on=[step_2],
 )
 def step_3(
     input_data: Step3Input,
@@ -80,7 +78,6 @@ class Step4Output(BaseModel):
     setup_script="clone_repo.sh",
     post_execution_script="push_to_git.sh",
     metadata={"type": "agent"},
-    depends_on=[step_2],
 )
 def step_4(
     input_data: Step4Input,

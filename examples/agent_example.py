@@ -16,7 +16,6 @@ class HelloWorldResult(BaseModel):
     setup_script="clone_repo.sh",
     post_execution_script="push_to_git.sh",
     metadata={"type": "agent"},
-    depends_on=[],
 )
 def hello_world_agent() -> HelloWorldResult:
     with BridgeSidecarClient() as client:
@@ -34,7 +33,6 @@ class ContinuationInput(BaseModel):
     setup_script="clone_repo.sh",
     post_execution_script="push_to_git.sh",
     metadata={"type": "agent"},
-    depends_on=[hello_world_agent],
 )
 def continuation_agent(
     input: ContinuationInput,

@@ -42,27 +42,19 @@ def step_data(
     post_execution_script: str | None = None,
     metadata: dict[str, Any] | None = None,
     sandbox_id: str | None = None,
-    depends_on: list[Union[str, "Step"]] | None = None,
     file_path: str | None = None,
     line_number: int | None = None,
 ) -> StepData:
     """Create a StepData object from a step function."""
     params_from_step_results_dict: dict[str, str] = {}
+    resolved_depends_on: list[str] = []
 
     for param, annotations in function_schema.param_annotations.items():
         from_step = extract_step_result_annotation(annotations)
         if from_step:
             params_from_step_results_dict[param] = from_step
 
-    # Convert Step objects to their names, keep strings as-is
-    resolved_depends_on: list[str] = []
-    for depends in depends_on or []:
-        # Check if it's a Step object by checking for step_data attribute
-        # This avoids circular import issues
-        if hasattr(depends, "step_data") and hasattr(depends, "on_invoke_step"):
-            resolved_depends_on.append(depends.step_data.name)
-        else:
-            resolved_depends_on.append(depends)
+    resolved_depends_on = set(params_from_step_results_dict.values())
 
     return StepData(
         name=name or function_schema.name,

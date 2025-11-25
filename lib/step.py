@@ -58,7 +58,6 @@ def step(
     post_execution_script: str | None = None,
     metadata: dict[str, Any] | None = None,
     sandbox_id: str | None = None,
-    depends_on: list[str | Step] | None = None,
 ) -> StepFunction[...]:
     """Overload for usage as @step (no parentheses)."""
     ...
@@ -73,7 +72,6 @@ def step(
     post_execution_script: str | None = None,
     metadata: dict[str, Any] | None = None,
     sandbox_id: str | None = None,
-    depends_on: list[str | Step] | None = None,
 ) -> Callable[[StepFunction[...]], StepFunction[...]]:
     """Overload for usage as @step(...)"""
     ...
@@ -88,7 +86,6 @@ def step(
     post_execution_script: str | None = None,
     metadata: dict[str, Any] | None = None,
     sandbox_id: str | None = None,
-    depends_on: list[str | Step] | None = None,
 ) -> Step | Callable[[StepFunction[...]], Step]:
     """Decorator for configuring a Step with execution metadata."""
 
@@ -114,7 +111,6 @@ def step(
             post_execution_script=post_execution_script,
             metadata=metadata,
             sandbox_id=sandbox_id,
-            depends_on=depends_on,
             file_path=file_path,
             line_number=line_number,
         )
