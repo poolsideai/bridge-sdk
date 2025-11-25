@@ -6,6 +6,7 @@ from typing import (
     Awaitable,
     Callable,
     Dict,
+    TypeVar,
     overload,
 )
 from pydantic import ValidationError
@@ -17,12 +18,14 @@ from lib.logger import logger
 from lib.step_data import StepData, step_data
 from lib.utils import get_relative_path
 
-StepParams = ParamSpec("StepParams")
-StepFunction = Callable[StepParams, Any]
+P = ParamSpec("P")
+R = TypeVar("R")
 
 
 @dataclass
-class Step:
+class StepAttributes:
+    """Attributes attached to a step-decorated function."""
+
     step_data: StepData
     """The step data to be used in Bridge."""
     on_invoke_step: Callable[[str, str], Awaitable[str]]
@@ -31,26 +34,14 @@ class Step:
     The arguments are to be passed as a json string.
     Returns a JSON string representation of the result.
     """
-    _original_func: Callable[..., Any]
-    """The original function that was decorated. Used for direct invocation."""
-
-    def __call__(self, *args, **kwargs):
-        """Allow direct invocation of the step function.
-
-        We use a wrapper class (rather than attaching attributes to the original
-        function) to enable future interception of step invocations (logging,
-        API calls, etc). When adding async interception, this may need to branch
-        on iscoroutinefunction to handle sync vs async invocation differently.
-        """
-        return self._original_func(*args, **kwargs)
 
 
-STEP_REGISTRY: Dict[str, Step] = {}
+STEP_REGISTRY: Dict[str, StepAttributes] = {}
 
 
 @overload
 def step(
-    func: StepFunction[...],
+    func: Callable[P, R],
     *,
     name: str | None = None,
     description: str | None = None,
@@ -58,7 +49,7 @@ def step(
     post_execution_script: str | None = None,
     metadata: dict[str, Any] | None = None,
     sandbox_id: str | None = None,
-) -> StepFunction[...]:
+) -> Callable[P, R]:
     """Overload for usage as @step (no parentheses)."""
     ...
 
@@ -72,13 +63,13 @@ def step(
     post_execution_script: str | None = None,
     metadata: dict[str, Any] | None = None,
     sandbox_id: str | None = None,
-) -> Callable[[StepFunction[...]], StepFunction[...]]:
+) -> Callable[[Callable[P, R]], Callable[P, R]]:
     """Overload for usage as @step(...)"""
     ...
 
 
 def step(
-    func: StepFunction[...] | None = None,
+    func: Callable[P, R] | None = None,
     *,
     name: str | None = None,
     description: str | None = None,
@@ -86,10 +77,14 @@ def step(
     post_execution_script: str | None = None,
     metadata: dict[str, Any] | None = None,
     sandbox_id: str | None = None,
-) -> Step | Callable[[StepFunction[...]], Step]:
-    """Decorator for configuring a Step with execution metadata."""
+) -> Callable[P, R] | Callable[[Callable[P, R]], Callable[P, R]]:
+    """Decorator for configuring a Step with execution metadata.
 
-    def _create_step(the_func: StepFunction[...]) -> Step:
+    Returns the original function with step attributes attached.
+    Access step metadata via `func.step_data` and `func.on_invoke_step`.
+    """
+
+    def _create_step(the_func: Callable[P, R]) -> Callable[P, R]:
         schema = function_schema(func=the_func)
         # Get the absolute file path of the function
         func_file = inspect.getfile(the_func)
@@ -167,22 +162,25 @@ def step(
                     f"Failed to serialize return value for step {schema.name}: {e}"
                 ) from e
 
-        step = Step(
+        step_attrs = StepAttributes(
             step_data=data,
             on_invoke_step=_on_invoke_step_impl,
-            _original_func=the_func,
         )
 
-        STEP_REGISTRY[data.name] = step
+        # Attach step attributes directly to the function
+        the_func.step_data = data  # type: ignore[attr-defined]
+        the_func.on_invoke_step = _on_invoke_step_impl  # type: ignore[attr-defined]
 
-        return step
+        STEP_REGISTRY[data.name] = step_attrs
+
+        return the_func
 
     # If func is actually a callable, we were used as @step with no parentheses
     if callable(func):
         return _create_step(func)
 
     # Otherwise, we were used as @step(...), so return a decorator
-    def decorator(real_func: StepFunction[...]) -> StepFunction[...]:
+    def decorator(real_func: Callable[P, R]) -> Callable[P, R]:
         return _create_step(real_func)
 
     return decorator
@@ -191,9 +189,9 @@ def step(
 def get_dsl_output() -> Dict[str, Any]:
     """Generate DSL output from the step registry with type information."""
     dsl_output = {}
-    for step_name, step in STEP_REGISTRY.items():
-        # STEP_REGISTRY stores Step objects
-        step_dict = step.step_data.model_dump(exclude_none=True)
+    for step_name, step_attrs in STEP_REGISTRY.items():
+        # STEP_REGISTRY stores StepAttributes objects
+        step_dict = step_attrs.step_data.model_dump(exclude_none=True)
         dsl_output[step_name] = step_dict
 
     return dsl_output

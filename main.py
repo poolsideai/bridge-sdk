@@ -9,7 +9,7 @@ from typing import Dict
 import json
 from pathlib import Path
 from lib import STEP_REGISTRY
-from lib.step import Step
+from lib.step import StepAttributes
 
 
 def load_config_modules() -> list[str]:
@@ -32,7 +32,7 @@ def get_modules_from_args(args) -> list[str]:
     return modules
 
 
-def discover_steps(module_paths: list[str]) -> Dict[str, Step]:
+def discover_steps(module_paths: list[str]) -> Dict[str, StepAttributes]:
     """Dynamically discover all classes decorated with @step in the specified modules.
 
     Args:

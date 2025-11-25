@@ -44,9 +44,9 @@ def test_step_decorator_registers_step_with_all_fields():
     assert "complete_step" in STEP_REGISTRY
     step_record = STEP_REGISTRY["complete_step"]
 
-    from lib.step import Step
+    from lib.step import StepAttributes
 
-    assert isinstance(step_record, Step)
+    assert isinstance(step_record, StepAttributes)
 
     step_data = step_record.step_data
     assert isinstance(step_data, StepData)

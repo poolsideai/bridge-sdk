@@ -1,10 +1,7 @@
-from typing import Any, Optional, TYPE_CHECKING, Union
+from typing import Any, Callable, Optional, Union
 from pydantic import BaseModel, Field
 
 from lib.function_schema import FunctionSchema
-
-if TYPE_CHECKING:
-    from lib.step import Step
 
 
 class StepData(BaseModel):
@@ -76,25 +73,25 @@ def step_data(
 STEP_RESULT_ANNOTATION_PREFIX = "step"
 
 
-def step_result(step: Union[str, "Step"]) -> str:
+def step_result(step: Union[str, Callable[..., Any]]) -> str:
     """Create a step_result annotation.
 
     Args:
-        step: Either a step name (str) or a Step object. If a Step object is provided,
-              the step's actual name will be used (which is the function name if no
-              override was provided, or the override name if @step(name=...) was used).
+        step: Either a step name (str) or a @step-decorated function. If a decorated
+              function is provided, the step's actual name will be used (which is the
+              function name if no override was provided, or the override name if
+              @step(name=...) was used).
 
     Returns:
         A string annotation in the format "step:step_name"
     """
-    # Check if it's a Step object by checking for step_data attribute
-    # This avoids circular import issues
+    # Check if it's a @step-decorated function by checking for step_data attribute
     if hasattr(step, "step_data") and hasattr(step, "on_invoke_step"):
         # Use the step's actual name (could be function name or override name)
-        step_name = step.step_data.name
+        step_name = step.step_data.name  # type: ignore[union-attr]
     else:
         # It's a string, use it directly
-        step_name = step
+        step_name = step  # type: ignore[assignment]
 
     return f"{STEP_RESULT_ANNOTATION_PREFIX}:{step_name}"
 
