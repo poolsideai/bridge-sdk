@@ -5,7 +5,6 @@ import argparse
 import asyncio
 import importlib
 import sys
-import os
 from typing import Dict
 import json
 from pathlib import Path
@@ -63,22 +62,6 @@ def cmd_config_get_dsl(args):
         step_name: step.step_data.model_dump()
         for (step_name, step) in STEP_REGISTRY.items()
     }
-
-    # Add commit information if available from environment variables
-    commit_hash = os.environ.get("COMMIT_HASH")
-    commit_timestamp = os.environ.get("COMMIT_TIMESTAMP")
-
-    if commit_hash or commit_timestamp:
-        commit_info = {}
-        if commit_hash:
-            commit_info["commit_hash"] = commit_hash
-        if commit_timestamp:
-            # Convert timestamp to integer if it's a string
-            try:
-                commit_info["commit_timestamp"] = int(commit_timestamp)
-            except (ValueError, TypeError):
-                commit_info["commit_timestamp"] = commit_timestamp
-        dsl_dict["_commit_info"] = commit_info
 
     dsl_json = json.dumps(dsl_dict, indent=2)
 
@@ -188,7 +171,11 @@ def main():
         "--output-file",
         help="Path to write the step result to",
     )
-    run_parser.add_argument("--output-file", help="Path to write the step result to")
+    run_parser.add_argument(
+        "--modules",
+        nargs="+",
+        help="Module paths to discover steps from (e.g., --modules examples my_steps)",
+    )
     run_parser.set_defaults(func=cmd_run_step)
 
     args = parser.parse_args()
