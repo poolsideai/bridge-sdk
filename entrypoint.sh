@@ -156,9 +156,9 @@ CMD_ARGS=("config" "get-dsl")
 if [ -n "${MODULE_PATH:-}" ]; then
     CMD_ARGS+=("--modules" "$MODULE_PATH")
 fi
-# Pass --output-file-path if DSL_OUTPUT_FILE is set
+# Pass --output-file if DSL_OUTPUT_FILE is set
 if [ -n "$DSL_OUTPUT_FILE" ]; then
-    CMD_ARGS+=("--output-file-path" "$DSL_OUTPUT_FILE")
+    CMD_ARGS+=("--output-file" "$DSL_OUTPUT_FILE")
 fi
 python main.py "${CMD_ARGS[@]}"
 

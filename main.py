@@ -85,7 +85,7 @@ def cmd_config_get_dsl(args):
     print(dsl_json)
 
     # Write to output file
-    output_path = Path(args.output_file_path)
+    output_path = Path(args.output_file)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(dsl_json)
     print(f"DSL JSON written to {output_path}")
@@ -166,7 +166,7 @@ def main():
         help="Module paths to discover steps from (e.g., --modules examples my_steps)",
     )
     get_dsl_parser.add_argument(
-        "--output-file-path",
+        "--output-file",
         default="/tmp/config_get_dsl/dsl.json",
         help="Path to write the DSL JSON file (default: /tmp/config_get_dsl/dsl.json)",
     )
