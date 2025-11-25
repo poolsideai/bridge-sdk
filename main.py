@@ -188,6 +188,7 @@ def main():
         "--output-file",
         help="Path to write the step result to",
     )
+    run_parser.add_argument("--output-file", help="Path to write the step result to")
     run_parser.set_defaults(func=cmd_run_step)
 
     args = parser.parse_args()
