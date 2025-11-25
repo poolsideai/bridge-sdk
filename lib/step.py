@@ -35,13 +35,14 @@ class Step:
     """The original function that was decorated. Used for direct invocation."""
 
     def __call__(self, *args, **kwargs):
-        """Allow direct invocation of the step function."""
-        if inspect.iscoroutinefunction(self._original_func):
-            # For async functions, return a coroutine that can be awaited
-            return self._original_func(*args, **kwargs)
-        else:
-            # For sync functions, call directly
-            return self._original_func(*args, **kwargs)
+        """Allow direct invocation of the step function.
+
+        We use a wrapper class (rather than attaching attributes to the original
+        function) to enable future interception of step invocations (logging,
+        API calls, etc). When adding async interception, this may need to branch
+        on iscoroutinefunction to handle sync vs async invocation differently.
+        """
+        return self._original_func(*args, **kwargs)
 
 
 STEP_REGISTRY: Dict[str, Step] = {}
