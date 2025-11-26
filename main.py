@@ -71,7 +71,6 @@ def cmd_config_get_dsl(args):
     output_path = Path(args.output_file)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(dsl_json)
-    print(f"DSL JSON written to {output_path}")
 
 
 async def cmd_run_step(args):
@@ -95,9 +94,21 @@ async def cmd_run_step(args):
 
     # Parse results JSON
     try:
-        cached_results = json.loads(args.results)
+        if args.results_file:
+            # Read from file
+            with open(args.results_file, "r") as f:
+                cached_results = json.load(f)
+        elif args.results:
+            # Parse from command line
+            cached_results = json.loads(args.results)
+        else:
+            print("Error: Either --results or --results-file must be provided")
+            sys.exit(1)
     except json.JSONDecodeError as e:
-        print(f"Error parsing --results JSON: {e}")
+        print(f"Error parsing results JSON: {e}")
+        sys.exit(1)
+    except FileNotFoundError as e:
+        print(f"Error: Results file not found: {args.results_file}")
         sys.exit(1)
 
     # 3. Get the step function
@@ -163,19 +174,21 @@ def main():
     )
     run_parser.add_argument("--input", required=True, help="Input to the step")
     run_parser.add_argument(
+        "--results", help='Json of cached results. e.g. {"Step1": "abc"}'
+    )
+    run_parser.add_argument(
+        "--results-file", help="Path to JSON file containing cached results"
+    )
+    run_parser.add_argument("--input", required=True, help="Input to the step")
+    run_parser.add_argument(
+        "--module", help="[DEPRECATED] Use --modules or bridge_config.py instead"
+    )
+    run_parser.add_argument(
         "--modules",
         nargs="+",
         help="Module paths to discover steps from (e.g., --modules examples my_steps)",
     )
-    run_parser.add_argument(
-        "--output-file",
-        help="Path to write the step result to",
-    )
-    run_parser.add_argument(
-        "--modules",
-        nargs="+",
-        help="Module paths to discover steps from (e.g., --modules examples my_steps)",
-    )
+    run_parser.add_argument("--output-file", help="Path to write the step result to")
     run_parser.set_defaults(func=cmd_run_step)
 
     args = parser.parse_args()
