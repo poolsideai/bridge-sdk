@@ -14,7 +14,7 @@ class StepData(BaseModel):
     metadata: dict[str, Any] | None = None,
     execution_env: dict[str, Any] | None = None,
     depends_on: list[str] | None = None,
-    file_name: str
+    file_path: str
     file_line_number: int
 
 class StepRecord:
@@ -41,7 +41,7 @@ def step(
             metadata=metadata,
             execution_env=execution_env,
             depends_on=depends_on or [],
-            file_name=os.path.relpath(inspect.getfile(func), REPO_ROOT),
+            file_path=os.path.relpath(inspect.getfile(func), REPO_ROOT),
             file_line_number=line_number
         )
         step_record = StepRecord(func=func, data=step_data)
