@@ -58,7 +58,7 @@ def step_3(input_data: Annotated[str, STEP_INPUT], step2_result: Annotated[str, 
     metadata={
         "type": "agent"
     },
-    depends_on=[Steps.STEP_2.value]
+    depends_on=[Steps.STEP_2.value],
 )
 def step_4(input_data: Annotated[str, STEP_INPUT], step2_result: Annotated[str, step_result(Steps.STEP_2.value)]) -> str:
     print("This was the output of step 2:", step2_result)
