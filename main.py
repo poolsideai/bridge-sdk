@@ -170,10 +170,6 @@ def main():
     run_parser = subparsers.add_parser("run", help="Run a specific step")
     run_parser.add_argument("--step", required=True, help="Name of the step to run")
     run_parser.add_argument(
-        "--results", required=True, help='Json of cached results. e.g. {"Step1": "abc"}'
-    )
-    run_parser.add_argument("--input", required=True, help="Input to the step")
-    run_parser.add_argument(
         "--results", help='Json of cached results. e.g. {"Step1": "abc"}'
     )
     run_parser.add_argument(
