@@ -16,6 +16,7 @@ class StepData(BaseModel):
     depends_on: list[str] | None = None,
     file_path: str
     file_line_number: int
+    credential_bindings: dict[str, str] | None = None
 
 class StepRecord:
     def __init__(self, func, data: StepData):
@@ -30,6 +31,7 @@ def step(
     metadata: dict[str, Any] | None = None,
     execution_env: dict[str, Any] | None = None,
     depends_on: list[str] | None = None,
+    credential_bindings: dict[str, str] | None = None
 ):
     """Decorator for configuring a Step with execution metadata."""
     def decorator(func):
@@ -42,7 +44,8 @@ def step(
             execution_env=execution_env,
             depends_on=depends_on or [],
             file_path=os.path.relpath(inspect.getfile(func), REPO_ROOT),
-            file_line_number=line_number
+            file_line_number=line_number,
+            credential_bindings=credential_bindings,
         )
         step_record = StepRecord(func=func, data=step_data)
         STEP_REGISTRY[name] = step_record
