@@ -25,7 +25,7 @@ class HelloWorldResult(BaseModel):
 )
 def hello_world_agent() -> HelloWorldResult:
     with BridgeSidecarClient() as client:
-        _, session_id, res = client.start_agent("say hello", agent_name="agent_1003_cc_v2_rc-fp8-tpr")
+        _, session_id, res = client.start_agent("say hello", agent_name="Malibu")
         return HelloWorldResult(session_id=session_id, res=res)
 
 
@@ -49,10 +49,10 @@ def continuation_agent(
         print(input)
         _, session_id, res = client.start_agent(
             "tell me what was done previously",
-            agent_name="agent_1003_cc_v2_rc-fp8-tpr",
+            agent_name="Malibu",
             continue_from=ContinueFrom(
                 previous_run_detail=RunDetail(
-                    agent_name="agent_1003_cc_v2_rc-fp8-tpr",
+                    agent_name="Malibu",
                     session_id=prev_result.session_id
                 ),
                 continuation=ContinueFrom.NoCompactionStrategy()
