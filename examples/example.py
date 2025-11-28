@@ -58,7 +58,8 @@ def step_3(input_data: Annotated[str, STEP_INPUT], step2_result: Annotated[str, 
     metadata={
         "type": "agent"
     },
-    depends_on=[Steps.STEP_2.value]
+    depends_on=[Steps.STEP_2.value],
+    credential_bindings={"019ac057-9adf-74ab-90ab-31bb0f9d77e8": "TEST"}
 )
 def step_4(input_data: Annotated[str, STEP_INPUT], step2_result: Annotated[str, step_result(Steps.STEP_2.value)]) -> str:
     print("This was the output of step 2:", step2_result)
