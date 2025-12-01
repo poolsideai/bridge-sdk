@@ -13,8 +13,8 @@ class Steps(Enum):
 
 @step(
     name=Steps.STEP_1.value,
-    setup_script="clone_repo.sh",
-    post_execution_script="push_to_git.sh",
+    setup_script="scripts/setup_test.sh",
+    post_execution_script="scripts/post_execution_test.sh",
     metadata={
         "type": "agent"
     },
@@ -27,8 +27,8 @@ def step_1(input_data: Annotated[str, STEP_INPUT]) -> str:
 
 @step(
     name=Steps.STEP_2.value,
-    setup_script="clone_repo.sh",
-    post_execution_script="push_to_git.sh",
+    setup_script="scripts/setup_test.sh",
+    post_execution_script="scripts/post_execution_test.sh",
     metadata={
         "type": "agent"
     },
@@ -40,8 +40,8 @@ def step_2(input_data: Annotated[str, STEP_INPUT], step_1_result: Annotated[str,
 
 @step(
     name=Steps.STEP_3.value,
-    setup_script="clone_repo.sh",
-    post_execution_script="push_to_git.sh",
+    setup_script="scripts/setup_test.sh",
+    post_execution_script="scripts/post_execution_test.sh",
     metadata={
         "type": "agent"
     },
@@ -53,8 +53,8 @@ def step_3(input_data: Annotated[str, STEP_INPUT], step2_result: Annotated[str, 
 
 @step(
     name=Steps.STEP_4.value,
-    setup_script="clone_repo.sh",
-    post_execution_script="push_to_git.sh",
+    setup_script="scripts/setup_test.sh",
+    post_execution_script="scripts/post_execution_test.sh",
     metadata={
         "type": "agent"
     },
