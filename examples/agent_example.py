@@ -16,8 +16,8 @@ class HelloWorldResult(BaseModel):
 
 @step(
     name=AgentSteps.HELLO_WORLD_AGENT.value,
-    setup_script="clone_repo.sh",
-    post_execution_script="push_to_git.sh",
+    setup_script="scripts/setup_test.sh",
+    post_execution_script="scripts/post_execution_test.sh",
     metadata={
         "type": "agent"
     },
@@ -34,8 +34,8 @@ class ContinuationInput(BaseModel):
 
 @step(
     name=AgentSteps.CONTINUATION_AGENT.value,
-    setup_script="clone_repo.sh",
-    post_execution_script="push_to_git.sh",
+    setup_script="scripts/setup_test.sh",
+    post_execution_script="scripts/post_execution_test.sh",
     metadata={
         "type": "agent"
     },
