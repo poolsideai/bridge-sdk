@@ -5,11 +5,10 @@ import argparse
 import asyncio
 import importlib
 import sys
-from typing import Dict
+from typing import Any, Callable, Dict
 import json
 from pathlib import Path
 from lib import STEP_REGISTRY
-from lib.step import StepAttributes
 
 
 def load_config_modules() -> list[str]:
@@ -32,8 +31,8 @@ def get_modules_from_args(args) -> list[str]:
     return modules
 
 
-def discover_steps(module_paths: list[str]) -> Dict[str, StepAttributes]:
-    """Dynamically discover all classes decorated with @step in the specified modules.
+def discover_steps(module_paths: list[str]) -> Dict[str, Callable[..., Any]]:
+    """Dynamically discover all functions decorated with @step in the specified modules.
 
     Args:
         module_paths: List of module paths to import and discover steps from.

@@ -1,43 +1,94 @@
-from dataclasses import dataclass
 import inspect
 import json
 from typing import (
     Any,
-    Awaitable,
     Callable,
     Dict,
     TypeVar,
     overload,
 )
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 from typing_extensions import ParamSpec
 
 from lib.exceptions import StepError
-from lib.function_schema import function_schema
+from lib.function_schema import FunctionSchema, create_function_schema
 from lib.logger import logger
-from lib.step_data import StepData, step_data
-from lib.utils import get_relative_path
+from lib.step_data import StepData, create_step_data
+
+STEP_REGISTRY: Dict[str, Callable[..., Any]] = {}
+
+async def invoke_step(
+    func: Callable[..., Any],
+    schema: FunctionSchema,
+    data: StepData,
+    input: str,
+    step_results: str,
+) -> str:
+    """Invoke a step function with JSON input and return JSON output.
+
+    Args:
+        func: The step function to invoke.
+        schema: The function schema for validation and serialization.
+        data: The step data containing metadata.
+        input: JSON string of input parameters.
+        step_results: JSON string of results from previous steps.
+
+    Returns:
+        JSON string of the function's return value.
+    """
+    try:
+        input_json_data: dict[str, Any] = json.loads(input) if input else {}
+    except Exception as e:
+        raise StepError(
+            f"Invalid JSON input for step {schema.name}: {input}"
+        ) from e
+
+    try:
+        step_results_json_data: dict[str, Any] = (
+            json.loads(step_results) if step_results else {}
+        )
+    except Exception as e:
+        raise StepError(
+            f"Invalid JSON step results for step {schema.name}: {step_results}"
+        ) from e
+
+    # If a cached result exists, use it in place of the input
+    for param_name, step_name in data.params_from_step_results.items():
+        if step_name in step_results_json_data:
+            input_json_data[param_name] = step_results_json_data[step_name]
+
+    try:
+        parsed = (
+            schema.params_pydantic_model(**input_json_data)
+            if input_json_data
+            else schema.params_pydantic_model()
+        )
+    except ValidationError as e:
+        raise StepError(
+            f"Invalid JSON input for step {schema.name}: {e}"
+        ) from e
+
+    kwargs = dict(parsed)
+
+    if inspect.iscoroutinefunction(func):
+        result = await func(**kwargs)
+    else:
+        result = func(**kwargs)
+
+    logger.debug(f"Step {data.name} completed.")
+
+    # Serialize the result to JSON
+    try:
+        # We assume the return type is a string if no return type is available on the schema
+        return_type = str if schema.return_type in (Any, None) else schema.return_type
+        return TypeAdapter(return_type).dump_json(result).decode()
+    except (ValueError, TypeError) as e:
+        raise StepError(
+            f"Failed to serialize return value for step {data.name}: {e}"
+        ) from e
 
 P = ParamSpec("P")
 R = TypeVar("R")
-
-
-@dataclass
-class StepAttributes:
-    """Attributes attached to a step-decorated function."""
-
-    step_data: StepData
-    """The step data to be used in Bridge."""
-    on_invoke_step: Callable[[str, str], Awaitable[str]]
-    """A function that invokes the step with the given parameters.
-    This is called when a step is executed through the bridge CLI.
-    The arguments are to be passed as a json string.
-    Returns a JSON string representation of the result.
-    """
-
-
-STEP_REGISTRY: Dict[str, StepAttributes] = {}
-
 
 @overload
 def step(
@@ -85,20 +136,10 @@ def step(
     """
 
     def _create_step(the_func: Callable[P, R]) -> Callable[P, R]:
-        schema = function_schema(func=the_func)
-        # Get the absolute file path of the function
-        func_file = inspect.getfile(the_func)
-        # Use get_relative_path which finds repo root by looking for .git or pyproject.toml
-        file_path = get_relative_path(func_file)
+        schema = create_function_schema(func=the_func)
 
-        # Get the line number where the function is defined
-        try:
-            line_number = inspect.getsourcelines(the_func)[1]
-        except (OSError, TypeError):
-            # Fallback if source is not available (e.g., built-in functions, C extensions)
-            line_number = None
-
-        data = step_data(
+        data = create_step_data(
+            func=the_func,
             function_schema=schema,
             name=name,
             description=description,
@@ -106,72 +147,16 @@ def step(
             post_execution_script=post_execution_script,
             metadata=metadata,
             sandbox_id=sandbox_id,
-            file_path=file_path,
-            line_number=line_number,
         )
 
-        async def _on_invoke_step_impl(input: str, step_results: str) -> str:
-            try:
-                input_json_data: dict[str, Any] = json.loads(input) if input else {}
-            except Exception as e:
-                raise StepError(
-                    f"Invalid JSON input for step {schema.name}: {input}"
-                ) from e
-
-            try:
-                step_results_json_data: dict[str, Any] = (
-                    json.loads(step_results) if step_results else {}
-                )
-            except Exception as e:
-                raise StepError(
-                    f"Invalid JSON step results for step {schema.name}: {step_results}"
-                ) from e
-
-            # If a cached result exists, use it
-            for param_name, step_name in data.params_from_step_results.items():
-                if step_name in step_results_json_data:
-                    input_json_data[param_name] = step_results_json_data[step_name]
-
-            try:
-                parsed = (
-                    schema.params_pydantic_model(**input_json_data)
-                    if input_json_data
-                    else schema.params_pydantic_model()
-                )
-            except ValidationError as e:
-                raise StepError(
-                    f"Invalid JSON input for step {schema.name}: {e}"
-                ) from e
-
-            args, kwargs_dict = schema.to_call_args(parsed)
-
-            logger.debug(f"Step call args: {args}, kwargs: {kwargs_dict}")
-
-            if inspect.iscoroutinefunction(the_func):
-                result = await the_func(*args, **kwargs_dict)
-            else:
-                result = the_func(*args, **kwargs_dict)
-
-            logger.debug(f"Step {data.name} completed.")
-
-            # Serialize the result to JSON
-            try:
-                return schema.serialize_return_value(result)
-            except (ValueError, TypeError) as e:
-                raise StepError(
-                    f"Failed to serialize return value for step {schema.name}: {e}"
-                ) from e
-
-        step_attrs = StepAttributes(
-            step_data=data,
-            on_invoke_step=_on_invoke_step_impl,
-        )
+        async def on_invoke_step(input: str, step_results: str) -> str:
+            return await invoke_step(the_func, schema, data, input, step_results)
 
         # Attach step attributes directly to the function
         the_func.step_data = data  # type: ignore[attr-defined]
-        the_func.on_invoke_step = _on_invoke_step_impl  # type: ignore[attr-defined]
+        the_func.on_invoke_step = on_invoke_step  # type: ignore[attr-defined]
 
-        STEP_REGISTRY[data.name] = step_attrs
+        STEP_REGISTRY[data.name] = the_func
 
         return the_func
 
@@ -180,18 +165,12 @@ def step(
         return _create_step(func)
 
     # Otherwise, we were used as @step(...), so return a decorator
-    def decorator(real_func: Callable[P, R]) -> Callable[P, R]:
-        return _create_step(real_func)
-
-    return decorator
+    return _create_step
 
 
 def get_dsl_output() -> Dict[str, Any]:
     """Generate DSL output from the step registry with type information."""
-    dsl_output = {}
-    for step_name, step_attrs in STEP_REGISTRY.items():
-        # STEP_REGISTRY stores StepAttributes objects
-        step_dict = step_attrs.step_data.model_dump(exclude_none=True)
-        dsl_output[step_name] = step_dict
-
-    return dsl_output
+    return {
+        step_name: step_func.step_data.model_dump(exclude_none=True)  # type: ignore[attr-defined]
+        for step_name, step_func in STEP_REGISTRY.items()
+    }

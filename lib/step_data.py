@@ -1,7 +1,11 @@
-from typing import Any, Callable, Optional, Union
+import inspect
+from typing import Any, Callable, Optional
+
 from pydantic import BaseModel, Field
 
+from lib.annotations import extract_step_result_annotation
 from lib.function_schema import FunctionSchema
+from lib.utils import get_relative_path
 
 
 class StepData(BaseModel):
@@ -15,23 +19,24 @@ class StepData(BaseModel):
     """The script to run after the step execution."""
     metadata: dict[str, Any] | None = None
     """Arbitrary metadata for the step."""
-    sandbox_id: str | None = None
-    """ID of the sandbox the step will be executed in. If not provided, a default sandbox will be used."""
+    execution_environment_id: str | None = None
+    """ID of the execution environment that the step will be executed in. If not provided, a default sandbox will be used."""
     depends_on: list[str] = Field(default_factory=list)
-    """The steps that this step depends on. Either a step name if defined in the same reposiory, or a step ID."""
+    """The steps that this step depends on. Either a step name if defined in the same repository, or a step ID."""
     file_path: str | None = None
     """The file path of the step function."""
     file_line_number: int | None = None
     """The line number of the step function."""
-    params_from_step_results: dict[str, str] = Field(default_factory=dict)
-    """A dictionary of param name to step name or ID, defining which steps results can be used to populate the param."""
     params_json_schema: dict[str, Any]
     """The json schema of the params."""
     return_json_schema: dict[str, Any]
-    """The return schema of the params."""
+    """The return schema of the function."""
+    params_from_step_results: dict[str, str] = Field(default_factory=dict)
+    """A dictionary of param name to step name, defining which steps results can be used to populate the param."""
 
 
-def step_data(
+def create_step_data(
+    func: Callable[..., Any],
     function_schema: FunctionSchema,
     name: str | None = None,
     description: str | None = None,
@@ -39,12 +44,19 @@ def step_data(
     post_execution_script: str | None = None,
     metadata: dict[str, Any] | None = None,
     sandbox_id: str | None = None,
-    file_path: str | None = None,
-    line_number: int | None = None,
 ) -> StepData:
     """Create a StepData object from a step function."""
+    # Extract file path and line number from the function
+    func_file = inspect.getfile(func)
+    file_path = get_relative_path(func_file)
+
+    try:
+        line_number = inspect.getsourcelines(func)[1]
+    except (OSError, TypeError):
+        # Fallback if source is not available (e.g., built-in functions, C extensions)
+        line_number = None
+
     params_from_step_results_dict: dict[str, str] = {}
-    resolved_depends_on: list[str] = []
 
     for param, annotations in function_schema.param_annotations.items():
         from_step = extract_step_result_annotation(annotations)
@@ -59,47 +71,11 @@ def step_data(
         setup_script=setup_script,
         post_execution_script=post_execution_script,
         metadata=metadata,
-        sandbox_id=sandbox_id,
-        depends_on=resolved_depends_on,
+        execution_environment_id=sandbox_id,
+        depends_on=list(resolved_depends_on),
         params_json_schema=function_schema.params_json_schema,
         return_json_schema=function_schema.return_json_schema,
         file_path=file_path,
         file_line_number=line_number,
         params_from_step_results=params_from_step_results_dict,
     )
-
-
-# Annotation helpers
-STEP_RESULT_ANNOTATION_PREFIX = "step"
-
-
-def step_result(step: Union[str, Callable[..., Any]]) -> str:
-    """Create a step_result annotation.
-
-    Args:
-        step: Either a step name (str) or a @step-decorated function. If a decorated
-              function is provided, the step's actual name will be used (which is the
-              function name if no override was provided, or the override name if
-              @step(name=...) was used).
-
-    Returns:
-        A string annotation in the format "step:step_name"
-    """
-    # Check if it's a @step-decorated function by checking for step_data attribute
-    if hasattr(step, "step_data") and hasattr(step, "on_invoke_step"):
-        # Use the step's actual name (could be function name or override name)
-        step_name = step.step_data.name  # type: ignore[union-attr]
-    else:
-        # It's a string, use it directly
-        step_name = step  # type: ignore[assignment]
-
-    return f"{STEP_RESULT_ANNOTATION_PREFIX}:{step_name}"
-
-
-def extract_step_result_annotation(annotations: tuple[Any, ...]) -> Optional[str]:
-    for annotation in annotations:
-        if isinstance(annotation, str) and annotation.startswith(
-            f"{STEP_RESULT_ANNOTATION_PREFIX}:"
-        ):
-            return annotation[5:].strip()  # Remove "step:" prefix (5 characters)
-    return None

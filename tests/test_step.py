@@ -42,20 +42,20 @@ def test_step_decorator_registers_step_with_all_fields():
         return "complete"
 
     assert "complete_step" in STEP_REGISTRY
-    step_record = STEP_REGISTRY["complete_step"]
+    step_func = STEP_REGISTRY["complete_step"]
 
-    from lib.step import StepAttributes
+    # Registry now stores the decorated function directly
+    assert callable(step_func)
+    assert hasattr(step_func, "step_data")
 
-    assert isinstance(step_record, StepAttributes)
-
-    step_data = step_record.step_data
+    step_data = step_func.step_data
     assert isinstance(step_data, StepData)
     assert step_data.name == "complete_step"
     assert step_data.description == "A test step"
     assert step_data.setup_script == "setup.sh"
     assert step_data.post_execution_script == "cleanup.sh"
     assert step_data.metadata == {"type": "test"}
-    assert step_data.sandbox_id == "test-sandbox"
+    assert step_data.execution_environment_id == "test-sandbox"
     assert step_data.depends_on == []  # No step_result annotations
     assert step_data.file_path == "tests/test_step.py"
     assert step_data.file_line_number is not None
