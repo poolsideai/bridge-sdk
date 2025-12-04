@@ -42,21 +42,21 @@ class StepFunction(Generic[P, R]):
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
         return self._func(*args, **kwargs)
 
-    async def on_invoke_step(self, input_json: str, step_results: str) -> str:
+    async def on_invoke_step(self, input: str, step_results: str) -> str:
         """Invoke the step with JSON input and return JSON output.
 
         Args:
-            input_json: JSON string of input parameters.
+            input: JSON string of input parameters.
             step_results: JSON string of results from previous steps.
 
         Returns:
             JSON string of the function's return value.
         """
         try:
-            input_data: dict[str, Any] = json.loads(input_json) if input_json else {}
+            input_data: dict[str, Any] = json.loads(input) if input else {}
         except Exception as e:
             raise StepError(
-                f"Invalid JSON input for step {self._schema.name}: {input_json}"
+                f"Invalid JSON input for step {self._schema.name}: {input}"
             ) from e
 
         try:

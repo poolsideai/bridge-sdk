@@ -121,7 +121,7 @@ async def cmd_run_step(args):
 
     # 5. Call the step function
     try:
-        result = await step.on_invoke_step(args.input, args.results)
+        result = await step.on_invoke_step(input=args.input, step_results=args.results)
         print(f"Step '{args.step}' executed successfully")
         print(f"Result: {result}")
 
