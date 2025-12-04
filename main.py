@@ -5,10 +5,10 @@ import argparse
 import asyncio
 import importlib
 import sys
-from typing import Any, Callable, Dict
+from typing import Dict
 import json
 from pathlib import Path
-from lib import STEP_REGISTRY
+from lib import STEP_REGISTRY, StepFunction
 
 
 def load_config_modules() -> list[str]:
@@ -31,7 +31,7 @@ def get_modules_from_args(args) -> list[str]:
     return modules
 
 
-def discover_steps(module_paths: list[str]) -> Dict[str, Callable[..., Any]]:
+def discover_steps(module_paths: list[str]) -> Dict[str, StepFunction]:
     """Dynamically discover all functions decorated with @step in the specified modules.
 
     Args:
@@ -121,7 +121,7 @@ async def cmd_run_step(args):
 
     # 5. Call the step function
     try:
-        result = await step.on_invoke_step(input=args.input, step_results=args.results)
+        result = await step.on_invoke_step(args.input, args.results)
         print(f"Step '{args.step}' executed successfully")
         print(f"Result: {result}")
 

@@ -1,7 +1,12 @@
-from typing import Callable, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
+
+if TYPE_CHECKING:
+    from lib.step import StepFunction
 
 STEP_RESULT_PREFIX = "step:"
-def step_result(step: str | Callable[..., Any]) -> str:
+
+
+def step_result(step: "str | StepFunction[..., Any]") -> str:
     """Create a step_result annotation.
 
     Args:
@@ -13,13 +18,10 @@ def step_result(step: str | Callable[..., Any]) -> str:
     Returns:
         A string annotation in the format "step:step_name"
     """
-    # Check if it's a @step-decorated function by checking for step_data attribute
-    if hasattr(step, "step_data") and hasattr(step, "on_invoke_step"):
-        # Use the step's actual name (could be function name or override name)
-        step_name = step.step_data.name  # type: ignore[union-attr]
+    if isinstance(step, str):
+        step_name = step
     else:
-        # It's a string, use it directly
-        step_name = step  # type: ignore[assignment]
+        step_name = step.step_data.name
 
     return f"{STEP_RESULT_PREFIX}{step_name}"
 
