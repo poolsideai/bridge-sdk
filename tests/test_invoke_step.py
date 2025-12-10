@@ -6,8 +6,8 @@ import pytest
 from typing import Annotated, Optional, List, Dict, Any
 from pydantic import BaseModel
 
-from lib import step, STEP_REGISTRY, step_result
-from lib.exceptions import StepError
+from bridge_sdk import step, STEP_REGISTRY, step_result
+from bridge_sdk.exceptions import StepError
 
 
 class SimpleInput(BaseModel):

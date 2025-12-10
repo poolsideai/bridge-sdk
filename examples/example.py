@@ -1,7 +1,7 @@
 from typing import Annotated
 
-from lib import step, step_result
-from lib.bridge_sidecar_client import BridgeSidecarClient
+from bridge_sdk import step, step_result
+from bridge_sdk.bridge_sidecar_client import BridgeSidecarClient
 from pydantic import BaseModel
 
 
