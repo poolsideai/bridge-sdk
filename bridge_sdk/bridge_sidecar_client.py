@@ -1,7 +1,7 @@
 """gRPC client for the Bridge service."""
 import grpc
 from typing import Optional
-from proto import bridge_sidecar_pb2, bridge_sidecar_pb2_grpc
+from bridge_sdk.proto import bridge_sidecar_pb2, bridge_sidecar_pb2_grpc
 
 
 class BridgeSidecarClient:

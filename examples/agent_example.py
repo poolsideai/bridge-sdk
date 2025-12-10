@@ -1,27 +1,21 @@
 from enum import Enum
 from typing import Annotated, Optional
 
-from lib import step, step_result, STEP_INPUT
-from lib.bridge_sidecar_client import BridgeSidecarClient
-from proto.bridge_sidecar_pb2 import ContinueFrom, RunDetail
+from bridge_sdk import step, step_result
+from bridge_sdk.bridge_sidecar_client import BridgeSidecarClient
+from bridge_sdk.proto.bridge_sidecar_pb2 import ContinueFrom, RunDetail
 from pydantic import BaseModel
 
-class AgentSteps(Enum):
-    HELLO_WORLD_AGENT= "HelloWorld"
-    CONTINUATION_AGENT="Continuation"
 
 class HelloWorldResult(BaseModel):
     session_id: str
     res: str
 
+
 @step(
-    name=AgentSteps.HELLO_WORLD_AGENT.value,
     setup_script="scripts/setup_test.sh",
     post_execution_script="scripts/post_execution_test.sh",
-    metadata={
-        "type": "agent"
-    },
-    depends_on=[]
+    metadata={"type": "agent"},
 )
 def hello_world_agent() -> HelloWorldResult:
     with BridgeSidecarClient() as client:
@@ -32,18 +26,15 @@ def hello_world_agent() -> HelloWorldResult:
 class ContinuationInput(BaseModel):
     prompt: str
 
+
 @step(
-    name=AgentSteps.CONTINUATION_AGENT.value,
     setup_script="scripts/setup_test.sh",
     post_execution_script="scripts/post_execution_test.sh",
-    metadata={
-        "type": "agent"
-    },
-    depends_on=[AgentSteps.HELLO_WORLD_AGENT.value]
+    metadata={"type": "agent"},
 )
 def continuation_agent(
-    input: Annotated[ContinuationInput, STEP_INPUT],
-    prev_result: Annotated[HelloWorldResult, step_result(AgentSteps.HELLO_WORLD_AGENT.value)]
+    input: ContinuationInput,
+    prev_result: Annotated[HelloWorldResult, step_result(hello_world_agent)],
 ) -> Optional[str]:
     with BridgeSidecarClient() as client:
         print(input)
@@ -53,9 +44,9 @@ def continuation_agent(
             continue_from=ContinueFrom(
                 previous_run_detail=RunDetail(
                     agent_name="Malibu",
-                    session_id=prev_result.session_id
+                    session_id=prev_result.session_id,
                 ),
-                continuation=ContinueFrom.NoCompactionStrategy()
-            )
+                continuation=ContinueFrom.NoCompactionStrategy(),
+            ),
         )
         return session_id
