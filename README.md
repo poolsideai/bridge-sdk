@@ -37,14 +37,14 @@ class ProcessInput(BaseModel):
 class ProcessOutput(BaseModel):
     result: str
 
-@step(name="process_data")
+@step
 def process_data(input_data: ProcessInput) -> ProcessOutput:
     return ProcessOutput(result=f"processed: {input_data.value}")
 
-@step(name="transform_data")
+@step
 def transform_data(
     input_data: ProcessInput,
-    previous: Annotated[ProcessOutput, step_result("process_data")],
+    previous: Annotated[ProcessOutput, step_result(process_data)],
 ) -> ProcessOutput:
     return ProcessOutput(result=f"{previous.result} -> {input_data.value}")
 ```
@@ -97,7 +97,7 @@ uv run bridge run --step process_data --input '{"input_data": {"value": "test"}}
 ```python
 from bridge_sdk import step
 
-@step(name="my_step")
+@step
 def my_step(value: str) -> str:
     return f"result: {value}"
 ```
@@ -110,17 +110,12 @@ Use `step_result` to declare dependencies:
 from typing import Annotated
 from bridge_sdk import step, step_result
 
-@step(name="step_a")
+@step
 def step_a() -> str:
     return "from step A"
 
-@step(name="step_b")
-def step_b(dep: Annotated[str, step_result("step_a")]) -> str:
-    return f"received: {dep}"
-
-# Can also reference the function directly
-@step(name="step_c")
-def step_c(dep: Annotated[str, step_result(step_a)]) -> str:
+@step
+def step_b(dep: Annotated[str, step_result(step_a)]) -> str:
     return f"received: {dep}"
 ```
 
@@ -128,7 +123,7 @@ def step_c(dep: Annotated[str, step_result(step_a)]) -> str:
 
 ```python
 @step(
-    name="my_step",                        # Defaults to function name
+    name="custom_name",                    # Override function name
     description="Does something useful",
     setup_script="setup.sh",
     post_execution_script="cleanup.sh",
@@ -142,7 +137,7 @@ def my_step() -> str:
 ### Async Steps
 
 ```python
-@step(name="async_step")
+@step
 async def async_step(value: str) -> str:
     return f"async result: {value}"
 ```
@@ -154,7 +149,7 @@ from bridge_sdk import step, step_result
 from bridge_sdk.bridge_sidecar_client import BridgeSidecarClient
 from bridge_sdk.proto.bridge_sidecar_pb2 import ContinueFrom, RunDetail
 
-@step(name="run_agent")
+@step
 def run_agent() -> dict:
     with BridgeSidecarClient() as client:
         _, session_id, result = client.start_agent(
