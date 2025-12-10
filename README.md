@@ -39,13 +39,44 @@ dependencies = [
 ]
 ```
 
-After installation, the `bridge` CLI command is automatically available.
+### Running the CLI
+
+After installation, how you invoke the `bridge` CLI depends on your environment:
+
+```bash
+# If using a virtual environment (activate it first)
+source .venv/bin/activate
+bridge --help
+
+# If using uv
+uv run bridge --help
+
+# If using poetry
+poetry run bridge --help
+
+# Alternative: invoke as a Python module (works in any setup)
+python -m bridge_sdk.cli --help
+```
+
+> **Note:** The `bridge` command is installed into your Python environment's `bin/` directory. If the command isn't found, ensure your virtual environment is activated or use `python -m bridge_sdk.cli` instead.
 
 ## Quick Start
 
-### 1. Create a step module
+### 1. Set up your project structure
 
-Create a file with your step definitions (e.g., `my_steps.py`):
+Your project must be a proper Python package with a `[build-system]` in `pyproject.toml`:
+
+```
+my_project/
+├── pyproject.toml
+└── my_project/
+    ├── __init__.py
+    └── steps.py      # Your step definitions
+```
+
+### 2. Create your step definitions
+
+Create your step module (e.g., `my_project/steps.py`):
 
 ```python
 from typing import Annotated
@@ -70,37 +101,88 @@ def transform_data(
     return ProcessOutput(result=f"{previous.result} -> {input_data.value}")
 ```
 
-### 2. Create a configuration file
+### 3. Configure your project
 
-Create `bridge_config.py` in your project root:
+Your `pyproject.toml` should include:
 
-```python
-STEP_MODULES = [
-    "my_steps",
+```toml
+[project]
+name = "my-project"
+version = "0.1.0"
+dependencies = [
+    "bridge-sdk @ git+https://github.com/poolsideai/bridge-sdk.git@v0.1.0",
 ]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.bridge]
+modules = ["my_project.steps"]
 ```
 
-### 3. Run CLI commands
+> **Important:** The `[build-system]` section is required so that your project gets installed and your step modules become importable.
+
+### 4. Install and run
 
 ```bash
+# Install dependencies (this also installs your project)
+uv sync  # or: pip install -e .
+
 # Discover all steps and get their DSL configuration
-bridge config get-dsl
+uv run bridge config get-dsl
 
 # Run a specific step
-bridge run --step process_data --input '{"input_data": {"value": "test"}}' --results '{}'
+uv run bridge run --step process_data --input '{"input_data": {"value": "test"}}' --results '{}'
 ```
 
 ## CLI Reference
+
+### Check Project Setup
+
+Validate that your project is correctly configured for Bridge SDK:
+
+```bash
+bridge check
+```
+
+This command verifies:
+- `pyproject.toml` exists
+- `[build-system]` section is configured (required for installation)
+- `[tool.bridge]` section with modules list
+- All configured modules are importable
+- Steps are discovered and registered
+
+Example output:
+```
+Checking Bridge SDK project setup...
+
+[OK]   pyproject.toml exists
+[OK]   [build-system] section configured
+[OK]   [tool.bridge] section configured
+[OK]   [tool.bridge.modules] configured: ['my_project.steps']
+
+Checking module imports...
+[OK]   Can import 'my_project.steps'
+
+[OK]   Found 2 step(s):
+       - process_data
+       - transform_data
+
+--------------------------------------------------
+
+All checks passed! Your project is ready for Bridge SDK.
+```
 
 ### Get DSL Configuration
 
 Discover all steps and retrieve their configuration:
 
 ```bash
-# Using config file (bridge_config.py)
+# Using config from pyproject.toml
 bridge config get-dsl
 
-# Specify modules directly
+# Or specify modules directly
 bridge config get-dsl --modules my_steps other_module
 
 # Write output to a specific file
@@ -120,7 +202,7 @@ bridge run --step <step_name> --input '<json>' --results '<json>'
 - `--input`: JSON string of input data (required)
 - `--results`: JSON object containing cached results from previous steps
 - `--results-file`: Path to JSON file containing cached results (alternative to `--results`)
-- `--modules`: Module paths to discover steps from (optional, uses `bridge_config.py` if not specified)
+- `--modules`: Module paths to discover steps from (optional, uses `pyproject.toml` config if not specified)
 - `--output-file`: Path to write the step result (optional)
 
 **Examples:**
@@ -325,7 +407,6 @@ bridge-sdk/
 │       └── bridge_sidecar_pb2_grpc.py
 ├── examples/                    # Example step definitions
 ├── tests/                       # Test suite
-├── bridge_config.py             # Default module configuration
 ├── pyproject.toml
 ├── Makefile
 └── README.md
