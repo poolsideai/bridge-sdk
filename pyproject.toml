@@ -12,6 +12,9 @@ dependencies = [
     "tomli>=2.0.0; python_version < '3.11'",
 ]
 
+[tool.bridge]
+modules = ["examples"]
+
 [project.scripts]
 bridge = "bridge_sdk.cli:main"
 
