@@ -97,7 +97,9 @@ class StepFunction(Generic[P, R]):
         # Serialize the result to JSON
         try:
             return_type = (
-                str if self._schema.return_type in (Any, None) else self._schema.return_type
+                str
+                if self._schema.return_type in (Any, None)
+                else self._schema.return_type
             )
             return TypeAdapter(return_type).dump_json(result).decode()
         except (ValueError, TypeError) as e:
@@ -107,6 +109,7 @@ class StepFunction(Generic[P, R]):
 
 
 STEP_REGISTRY: Dict[str, StepFunction[..., Any]] = {}
+
 
 @overload
 def step(
@@ -118,6 +121,7 @@ def step(
     post_execution_script: str | None = None,
     metadata: dict[str, Any] | None = None,
     sandbox_id: str | None = None,
+    credential_bindings: dict[str, str] | None = None,
 ) -> StepFunction[P, R]:
     """Overload for usage as @step (no parentheses)."""
     ...
@@ -132,6 +136,7 @@ def step(
     post_execution_script: str | None = None,
     metadata: dict[str, Any] | None = None,
     sandbox_id: str | None = None,
+    credential_bindings: dict[str, str] | None = None,
 ) -> Callable[[Callable[P, R]], StepFunction[P, R]]:
     """Overload for usage as @step(...)"""
     ...
@@ -146,6 +151,7 @@ def step(
     post_execution_script: str | None = None,
     metadata: dict[str, Any] | None = None,
     sandbox_id: str | None = None,
+    credential_bindings: dict[str, str] | None = None,
 ) -> StepFunction[P, R] | Callable[[Callable[P, R]], StepFunction[P, R]]:
     """Decorator for configuring a Step with execution metadata.
 
@@ -164,6 +170,7 @@ def step(
             post_execution_script=post_execution_script,
             metadata=metadata,
             sandbox_id=sandbox_id,
+            credential_bindings=credential_bindings,
         )
 
         step_function = StepFunction(the_func, schema, data)

@@ -33,6 +33,8 @@ class StepData(BaseModel):
     """The return schema of the function."""
     params_from_step_results: dict[str, str] = Field(default_factory=dict)
     """A dictionary of param name to step name, defining which steps results can be used to populate the param."""
+    credential_bindings: dict[str, str] | None = None
+    """A dictionary of credential name to credential ID, defining which credentials can be used to populate the step."""
 
 
 def create_step_data(
@@ -44,6 +46,7 @@ def create_step_data(
     post_execution_script: str | None = None,
     metadata: dict[str, Any] | None = None,
     sandbox_id: str | None = None,
+    credential_bindings: dict[str, str] | None = None,
 ) -> StepData:
     """Create a StepData object from a step function."""
     # Extract file path and line number from the function
@@ -78,4 +81,5 @@ def create_step_data(
         file_path=file_path,
         file_line_number=line_number,
         params_from_step_results=params_from_step_results_dict,
+        credential_bindings=credential_bindings,
     )

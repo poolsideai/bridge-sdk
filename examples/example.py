@@ -15,8 +15,8 @@ class Step1Output(BaseModel):
 
 
 @step(
-    setup_script="clone_repo.sh",
-    post_execution_script="push_to_git.sh",
+    setup_script="scripts/setup_test.sh",
+    post_execution_script="scripts/post_execution_test.sh",
     metadata={"type": "agent"},
 )
 def step_1(input_data: Step1Input) -> Step1Output:
@@ -34,8 +34,8 @@ class Step2Output(BaseModel):
 
 @step(
     name="step_2_override",
-    setup_script="clone_repo.sh",
-    post_execution_script="push_to_git.sh",
+    setup_script="scripts/setup_test.sh",
+    post_execution_script="scripts/post_execution_test.sh",
     metadata={"type": "agent"},
 )
 def step_2(
@@ -55,8 +55,8 @@ class Step3Output(BaseModel):
 
 
 @step(
-    setup_script="clone_repo.sh",
-    post_execution_script="push_to_git.sh",
+    setup_script="scripts/setup_test.sh",
+    post_execution_script="scripts/post_execution_test.sh",
 )
 def step_3(
     input_data: Step3Input,
