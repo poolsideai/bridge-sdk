@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from dataclasses import dataclass
 from enum import Enum
 
-from lib import step, STEP_REGISTRY
+from bridge_sdk import step, STEP_REGISTRY
 
 
 class SimpleModel(BaseModel):

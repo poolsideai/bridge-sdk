@@ -3,9 +3,9 @@ from typing import Any, Callable, Optional
 
 from pydantic import BaseModel, Field
 
-from lib.annotations import extract_step_result_annotation
-from lib.function_schema import FunctionSchema
-from lib.utils import get_relative_path
+from bridge_sdk.annotations import extract_step_result_annotation
+from bridge_sdk.function_schema import FunctionSchema
+from bridge_sdk.utils import get_relative_path
 
 
 class StepData(BaseModel):

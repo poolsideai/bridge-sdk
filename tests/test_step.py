@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Annotated, Literal, Union
 from pydantic import BaseModel, Discriminator
 
-from lib import step, STEP_REGISTRY, StepData, get_dsl_output, step_result
+from bridge_sdk import step, STEP_REGISTRY, StepData, get_dsl_output, step_result
 
 
 # Test Pydantic models
@@ -184,7 +184,7 @@ def test_file_path_resolution_in_sandbox_environment():
         subdir = repo_root / "examples"
         subdir.mkdir()
         test_module_file = subdir / "sandbox_test_module.py"
-        test_module_file.write_text("""from lib import step
+        test_module_file.write_text("""from bridge_sdk import step
 
 @step(name="sandbox_test_step")
 def sandbox_test_function():

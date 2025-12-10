@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from proto import bridge_sidecar_pb2 as proto_dot_bridge__sidecar__pb2
+from bridge_sdk.proto import bridge_sidecar_pb2 as proto_dot_bridge__sidecar__pb2
 
 GRPC_GENERATED_VERSION = '1.76.0'
 GRPC_VERSION = grpc.__version__

@@ -11,10 +11,10 @@ from typing import (
 from pydantic import TypeAdapter, ValidationError
 from typing_extensions import ParamSpec, TypeVar
 
-from lib.exceptions import StepError
-from lib.function_schema import FunctionSchema, create_function_schema
-from lib.logger import logger
-from lib.step_data import StepData, create_step_data
+from bridge_sdk.exceptions import StepError
+from bridge_sdk.function_schema import FunctionSchema, create_function_schema
+from bridge_sdk.logger import logger
+from bridge_sdk.step_data import StepData, create_step_data
 
 P = ParamSpec("P")
 R = TypeVar("R")

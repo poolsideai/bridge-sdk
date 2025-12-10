@@ -8,7 +8,7 @@ import sys
 from typing import Dict
 import json
 from pathlib import Path
-from lib import STEP_REGISTRY, StepFunction
+from bridge_sdk import STEP_REGISTRY, StepFunction
 
 
 def load_config_modules() -> list[str]:
