@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 import inspect
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -11,29 +13,29 @@ from bridge_sdk.utils import get_relative_path
 class StepData(BaseModel):
     name: str
     """The name of the step."""
-    description: str | None
+    description: Optional[str]
     """The description of the step."""
-    setup_script: str | None = None
+    setup_script: Optional[str] = None
     """The script to run before the step execution."""
-    post_execution_script: str | None = None
+    post_execution_script: Optional[str] = None
     """The script to run after the step execution."""
-    metadata: dict[str, Any] | None = None
+    metadata: Optional[Dict[str, Any]] = None
     """Arbitrary metadata for the step."""
-    execution_environment_id: str | None = None
+    execution_environment_id: Optional[str] = None
     """ID of the execution environment that the step will be executed in. If not provided, a default sandbox will be used."""
-    depends_on: list[str] = Field(default_factory=list)
+    depends_on: List[str] = Field(default_factory=list)
     """The steps that this step depends on. Either a step name if defined in the same repository, or a step ID."""
-    file_path: str | None = None
+    file_path: Optional[str] = None
     """The file path of the step function."""
-    file_line_number: int | None = None
+    file_line_number: Optional[int] = None
     """The line number of the step function."""
-    params_json_schema: dict[str, Any]
+    params_json_schema: Dict[str, Any]
     """The json schema of the params."""
-    return_json_schema: dict[str, Any]
+    return_json_schema: Dict[str, Any]
     """The return schema of the function."""
-    params_from_step_results: dict[str, str] = Field(default_factory=dict)
+    params_from_step_results: Dict[str, str] = Field(default_factory=dict)
     """A dictionary of param name to step name, defining which steps results can be used to populate the param."""
-    credential_bindings: dict[str, str] | None = None
+    credential_bindings: Optional[Dict[str, str]] = None
     """A dictionary of credential name to credential ID, defining which credentials can be used to populate the step."""
 
 
