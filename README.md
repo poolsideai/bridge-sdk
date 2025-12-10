@@ -17,7 +17,26 @@ The CLI provides commands to discover steps and execute them with dependency res
 Install directly from the git repository:
 
 ```bash
+# Install latest version
 pip install git+https://github.com/poolsideai/bridge-sdk.git
+
+# Install a specific version (recommended for production)
+pip install git+https://github.com/poolsideai/bridge-sdk.git@v0.1.0
+```
+
+Or add to your `requirements.txt`:
+
+```
+bridge-sdk @ git+https://github.com/poolsideai/bridge-sdk.git@v0.1.0
+```
+
+Or in `pyproject.toml`:
+
+```toml
+[project]
+dependencies = [
+    "bridge-sdk @ git+https://github.com/poolsideai/bridge-sdk.git@v0.1.0",
+]
 ```
 
 After installation, the `bridge` CLI command is automatically available.
