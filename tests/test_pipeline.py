@@ -199,6 +199,7 @@ class TestDagComputation:
 
     def test_linear_dag_computation(self):
         """Test DAG computation for a linear pipeline (A -> B -> C)."""
+
         # Create steps with linear dependencies
         @step(name="step_a")
         def step_a() -> IntermediateModel:
@@ -206,13 +207,13 @@ class TestDagComputation:
 
         @step(name="step_b")
         def step_b(
-            input: Annotated[IntermediateModel, step_result("step_a")]
+            input: Annotated[IntermediateModel, step_result("step_a")],
         ) -> IntermediateModel:
             return IntermediateModel(processed="b")
 
         @step(name="step_c")
         def step_c(
-            input: Annotated[IntermediateModel, step_result("step_b")]
+            input: Annotated[IntermediateModel, step_result("step_b")],
         ) -> OutputModel:
             return OutputModel(result="c")
 
@@ -276,13 +277,13 @@ class TestDagComputation:
 
         @step(name="fanout_b")
         def fanout_b(
-            input: Annotated[IntermediateModel, step_result("fanout_a")]
+            input: Annotated[IntermediateModel, step_result("fanout_a")],
         ) -> OutputModel:
             return OutputModel(result="b")
 
         @step(name="fanout_c")
         def fanout_c(
-            input: Annotated[IntermediateModel, step_result("fanout_a")]
+            input: Annotated[IntermediateModel, step_result("fanout_a")],
         ) -> OutputModel:
             return OutputModel(result="c")
 
@@ -309,13 +310,13 @@ class TestDagComputation:
 
         @step(name="diamond_b")
         def diamond_b(
-            input: Annotated[IntermediateModel, step_result("diamond_a")]
+            input: Annotated[IntermediateModel, step_result("diamond_a")],
         ) -> IntermediateModel:
             return IntermediateModel(processed="b")
 
         @step(name="diamond_c")
         def diamond_c(
-            input: Annotated[IntermediateModel, step_result("diamond_a")]
+            input: Annotated[IntermediateModel, step_result("diamond_a")],
         ) -> IntermediateModel:
             return IntermediateModel(processed="c")
 
@@ -378,7 +379,7 @@ class TestSchemaComputation:
 
         @step(name="schema_leaf")
         def schema_leaf(
-            data: Annotated[IntermediateModel, step_result("schema_root")]
+            data: Annotated[IntermediateModel, step_result("schema_root")],
         ) -> OutputModel:
             return OutputModel(result=data.processed)
 
@@ -410,7 +411,7 @@ class TestSchemaComputation:
 
         @step(name="out_leaf")
         def out_leaf(
-            data: Annotated[IntermediateModel, step_result("out_root")]
+            data: Annotated[IntermediateModel, step_result("out_root")],
         ) -> OutputModel:
             return OutputModel(result=data.processed)
 
@@ -441,13 +442,13 @@ class TestSchemaComputation:
 
         @step(name="multi_leaf_x")
         def multi_leaf_x(
-            data: Annotated[IntermediateModel, step_result("multi_root_a")]
+            data: Annotated[IntermediateModel, step_result("multi_root_a")],
         ) -> OutputModel:
             return OutputModel(result="x")
 
         @step(name="multi_leaf_y")
         def multi_leaf_y(
-            data: Annotated[IntermediateModel, step_result("multi_root_b")]
+            data: Annotated[IntermediateModel, step_result("multi_root_b")],
         ) -> OutputModel:
             return OutputModel(result="y")
 
@@ -456,7 +457,12 @@ class TestSchemaComputation:
         pipeline_data = compute_pipeline_data(
             pipeline=pipeline,
             module_path="test.multi",
-            module_steps=["multi_root_a", "multi_root_b", "multi_leaf_x", "multi_leaf_y"],
+            module_steps=[
+                "multi_root_a",
+                "multi_root_b",
+                "multi_leaf_x",
+                "multi_leaf_y",
+            ],
             step_registry=STEP_REGISTRY,
         )
 
@@ -479,6 +485,7 @@ class TestDslOutputFormat:
 
     def test_dsl_output_structure(self):
         """Test that DSL output has the correct top-level structure."""
+
         # Create a simple pipeline with steps
         @step(name="dsl_step_a")
         def dsl_step_a() -> IntermediateModel:
@@ -486,7 +493,7 @@ class TestDslOutputFormat:
 
         @step(name="dsl_step_b")
         def dsl_step_b(
-            input: Annotated[IntermediateModel, step_result("dsl_step_a")]
+            input: Annotated[IntermediateModel, step_result("dsl_step_a")],
         ) -> OutputModel:
             return OutputModel(result="b")
 
@@ -505,9 +512,7 @@ class TestDslOutputFormat:
                 name: STEP_REGISTRY[name].step_data.model_dump()
                 for name in ["dsl_step_a", "dsl_step_b"]
             },
-            "pipelines": {
-                "dsl_test_pipeline": pipeline_data.model_dump()
-            },
+            "pipelines": {"dsl_test_pipeline": pipeline_data.model_dump()},
         }
 
         # Verify structure
@@ -547,12 +552,8 @@ class TestDslOutputFormat:
         )
 
         dsl_output = {
-            "steps": {
-                "json_step": STEP_REGISTRY["json_step"].step_data.model_dump()
-            },
-            "pipelines": {
-                "json_pipeline": pipeline_data.model_dump()
-            },
+            "steps": {"json_step": STEP_REGISTRY["json_step"].step_data.model_dump()},
+            "pipelines": {"json_pipeline": pipeline_data.model_dump()},
         }
 
         # Should not raise
@@ -582,7 +583,7 @@ class TestPipelineIntegration:
         @step(name="ref_target")
         def ref_target(
             # Reference the step object directly, not by name string
-            data: Annotated[IntermediateModel, step_result(ref_source)]
+            data: Annotated[IntermediateModel, step_result(ref_source)],
         ) -> OutputModel:
             return OutputModel(result=data.processed)
 
@@ -620,7 +621,7 @@ class TestPipelineIntegration:
         # Use a non-standard variable name
         my_custom_pipeline_name = Pipeline(
             name="custom_named_pipeline",
-            description="Pipeline with custom variable name"
+            description="Pipeline with custom variable name",
         )
 
         assert "custom_named_pipeline" in PIPELINE_REGISTRY
@@ -653,4 +654,3 @@ class TestModuleDiscovery:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-
