@@ -117,6 +117,28 @@ class TestPipelineClass:
         assert len(PIPELINE_REGISTRY) == 1
         assert PIPELINE_REGISTRY["override_test"].description == "Second"
 
+    def test_pipeline_with_rid(self):
+        """Test that Pipeline can be instantiated with a rid."""
+        pipeline = Pipeline(
+            name="rid_test_pipeline",
+            rid="550e8400-e29b-41d4-a716-446655440000",
+            description="Pipeline with rid",
+        )
+
+        assert pipeline.name == "rid_test_pipeline"
+        assert pipeline.rid == "550e8400-e29b-41d4-a716-446655440000"
+        assert pipeline.description == "Pipeline with rid"
+
+    def test_pipeline_rid_in_repr(self):
+        """Test Pipeline repr includes rid."""
+        pipeline = Pipeline(
+            name="repr_rid_test",
+            rid="test-rid-123",
+        )
+
+        repr_str = repr(pipeline)
+        assert "test-rid-123" in repr_str
+
 
 # =============================================================================
 # PipelineData Model Tests
@@ -187,6 +209,29 @@ class TestPipelineDataModel:
         parsed = json.loads(json_str)
         assert parsed["name"] == "serializable_pipeline"
         assert parsed["steps"] == ["step_x"]
+
+    def test_pipeline_data_with_rid(self):
+        """Test that PipelineData includes rid when provided."""
+        data = PipelineData(
+            name="rid_pipeline",
+            rid="550e8400-e29b-41d4-a716-446655440000",
+            module_path="test.rid",
+        )
+
+        assert data.rid == "550e8400-e29b-41d4-a716-446655440000"
+
+        # Verify serialization includes rid
+        dumped = data.model_dump()
+        assert dumped["rid"] == "550e8400-e29b-41d4-a716-446655440000"
+
+    def test_pipeline_data_rid_optional(self):
+        """Test that PipelineData rid is optional and defaults to None."""
+        data = PipelineData(
+            name="no_rid_pipeline",
+            module_path="test.no_rid",
+        )
+
+        assert data.rid is None
 
 
 # =============================================================================

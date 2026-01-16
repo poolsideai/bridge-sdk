@@ -280,5 +280,57 @@ def test_get_dsl_output():
     assert isinstance(step_data["return_json_schema"], dict)
 
 
+def test_step_with_rid():
+    """Test that @step decorator accepts rid parameter."""
+
+    @step(rid="660e8400-e29b-41d4-a716-446655440001")
+    def step_with_rid() -> str:
+        return "test"
+
+    step_data = STEP_REGISTRY["step_with_rid"].step_data
+    assert step_data.rid == "660e8400-e29b-41d4-a716-446655440001"
+
+
+def test_step_without_rid():
+    """Test that step rid defaults to None."""
+
+    @step
+    def step_without_rid() -> str:
+        return "test"
+
+    step_data = STEP_REGISTRY["step_without_rid"].step_data
+    assert step_data.rid is None
+
+
+def test_step_rid_in_serialization():
+    """Test that rid is included in step data serialization."""
+    import json
+
+    @step(rid="test-step-rid-123")
+    def step_rid_serialize() -> str:
+        return "test"
+
+    step_data = STEP_REGISTRY["step_rid_serialize"].step_data
+    dumped = step_data.model_dump()
+    assert dumped["rid"] == "test-step-rid-123"
+
+    # Ensure it's JSON serializable
+    json_str = json.dumps(dumped)
+    assert "test-step-rid-123" in json_str
+
+
+def test_step_rid_with_name_override():
+    """Test that rid works together with name override."""
+
+    @step(name="custom_name_with_rid", rid="custom-rid-456")
+    def original_function_name() -> str:
+        return "test"
+
+    assert "custom_name_with_rid" in STEP_REGISTRY
+    step_data = STEP_REGISTRY["custom_name_with_rid"].step_data
+    assert step_data.name == "custom_name_with_rid"
+    assert step_data.rid == "custom-rid-456"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

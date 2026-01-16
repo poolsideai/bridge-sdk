@@ -213,6 +213,7 @@ def compute_pipeline_data(
 
     return PipelineData(
         name=pipeline.name,
+        rid=pipeline.rid,
         description=pipeline.description,
         module_path=module_path,
         steps=module_steps,

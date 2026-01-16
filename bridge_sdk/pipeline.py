@@ -40,21 +40,27 @@ class Pipeline:
 
     Attributes:
         name: The unique name of the pipeline.
+        rid: Optional stable resource identifier (UUID).
         description: Optional human-readable description.
     """
 
     def __init__(
         self,
         name: str,
+        rid: str | None = None,
         description: str | None = None,
     ):
         """Initialize a Pipeline.
 
         Args:
             name: The unique name of the pipeline.
+            rid: Optional stable resource identifier (UUID). If provided, the
+                backend will use this rid instead of generating a new one.
+                This enables renaming pipelines while preserving their identity.
             description: Optional human-readable description.
         """
         self.name = name
+        self.rid = rid
         self.description = description
         self._module_path: str | None = None  # Set during discovery
 
@@ -62,7 +68,7 @@ class Pipeline:
         PIPELINE_REGISTRY[name] = self
 
     def __repr__(self) -> str:
-        return f"Pipeline(name={self.name!r}, description={self.description!r})"
+        return f"Pipeline(name={self.name!r}, rid={self.rid!r}, description={self.description!r})"
 
 
 class PipelineData(BaseModel):
@@ -73,6 +79,7 @@ class PipelineData(BaseModel):
 
     Attributes:
         name: The unique name of the pipeline.
+        rid: Optional stable resource identifier (UUID).
         description: Optional human-readable description.
         module_path: The Python module path (e.g., "pipelines.doc_eval").
         steps: List of step names defined in this pipeline's module.
@@ -85,6 +92,10 @@ class PipelineData(BaseModel):
 
     name: str
     """The unique name of the pipeline."""
+
+    rid: Optional[str] = None
+    """Optional stable resource identifier (UUID). If provided, the backend
+    will use this rid instead of generating a new one."""
 
     description: Optional[str] = None
     """Optional human-readable description."""

@@ -116,6 +116,7 @@ def step(
     func: Callable[P, R],
     *,
     name: str | None = None,
+    rid: str | None = None,
     description: str | None = None,
     setup_script: str | None = None,
     post_execution_script: str | None = None,
@@ -131,6 +132,7 @@ def step(
 def step(
     *,
     name: str | None = None,
+    rid: str | None = None,
     description: str | None = None,
     setup_script: str | None = None,
     post_execution_script: str | None = None,
@@ -146,6 +148,7 @@ def step(
     func: Callable[P, R] | None = None,
     *,
     name: str | None = None,
+    rid: str | None = None,
     description: str | None = None,
     setup_script: str | None = None,
     post_execution_script: str | None = None,
@@ -155,7 +158,21 @@ def step(
 ) -> StepFunction[P, R] | Callable[[Callable[P, R]], StepFunction[P, R]]:
     """Decorator for configuring a Step with execution metadata.
 
-    Returns a StepFunction wrapper with step_data and on_invoke_step attributes.
+    Args:
+        func: The function to decorate (when used without parentheses).
+        name: Optional override name for the step. Defaults to function name.
+        rid: Optional stable resource identifier (UUID). If provided, the backend
+            will use this rid instead of generating a new one. This enables
+            renaming steps while preserving their identity in the backend.
+        description: Optional human-readable description.
+        setup_script: Optional script to run before step execution.
+        post_execution_script: Optional script to run after step execution.
+        metadata: Optional arbitrary metadata dict.
+        sandbox_id: Optional execution environment ID.
+        credential_bindings: Optional credential name to ID mappings.
+
+    Returns:
+        A StepFunction wrapper with step_data and on_invoke_step attributes.
     """
 
     def _create_step_function(the_func: Callable[P, R]) -> StepFunction[P, R]:
@@ -165,6 +182,7 @@ def step(
             func=the_func,
             function_schema=schema,
             name=name,
+            rid=rid,
             description=description,
             setup_script=setup_script,
             post_execution_script=post_execution_script,
