@@ -417,11 +417,32 @@ async def cmd_run_step(args):
     # 3. Get the step function
     step = steps[step_name]
 
-    # Verify dependencies are available
-    dependencies = step.step_data.depends_on or []
-    missing_deps = [dep for dep in dependencies if dep not in cached_results]
-    if missing_deps:
-        raise ValueError(f"Missing cached results for: {', '.join(missing_deps)}")
+    # === Step 1: Resolution ===
+    # Combine --input and --results into the final resolved input
+    # Priority: --input values take precedence over --results
+    try:
+        input_data = json.loads(args.input) if args.input else {}
+    except json.JSONDecodeError as e:
+        print(f"Error parsing input JSON: {e}")
+        sys.exit(1)
+
+    resolved_input = dict(input_data)  # Start with explicit input
+
+    # Fill in params from step results (same logic as on_invoke_step)
+    for param_name, dep_step_name in step.step_data.params_from_step_results.items():
+        # Only fill from results if not already provided in input
+        if param_name not in resolved_input and dep_step_name in cached_results:
+            resolved_input[param_name] = cached_results[dep_step_name]
+
+    # === Step 2: Validation ===
+    # Check that all required params are present in resolved input
+    missing_params = []
+    for param_name, dep_step_name in step.step_data.params_from_step_results.items():
+        if param_name not in resolved_input:
+            missing_params.append(f"{param_name} (from step: {dep_step_name})")
+
+    if missing_params:
+        raise ValueError(f"Missing required parameters: {', '.join(missing_params)}")
 
     # 5. Call the step function
     try:
