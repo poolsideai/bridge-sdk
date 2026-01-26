@@ -144,20 +144,73 @@ async def async_step(value: str) -> str:
 
 ## Calling Agents
 
+The `BridgeSidecarClient.start_agent()` method returns a tuple of `(_, session_id, status)`, where `status` is just a success/fail message, **not** the actual agent output.
+
+To get the agent's response, you must:
+1. Instruct the agent in the prompt to write its output to a specific file
+2. Read that file after the agent completes
+
 ```python
-from bridge_sdk import step, step_result
+import json
+from bridge_sdk import step
 from bridge_sdk.bridge_sidecar_client import BridgeSidecarClient
-from bridge_sdk.proto.bridge_sidecar_pb2 import ContinueFrom, RunDetail
+
+OUTPUT_FILE = "/tmp/agent_output.json"
+
+PROMPT = """Do some analysis and write your results.
+
+CRITICAL: You MUST write your output to {output_file} using the write tool.
+
+Output JSON structure:
+{{
+    "result": "your analysis here",
+    "details": ["item1", "item2"]
+}}
+"""
 
 @step
 def run_agent() -> dict:
+    prompt = PROMPT.format(output_file=OUTPUT_FILE)
+
     with BridgeSidecarClient() as client:
-        _, session_id, result = client.start_agent(
-            prompt="say hello",
+        _, session_id, _ = client.start_agent(
+            prompt=prompt,
             agent_name="my-agent"
         )
-        return {"session_id": session_id, "result": result}
+
+    # Read the output from the file the agent wrote
+    try:
+        with open(OUTPUT_FILE, "r") as f:
+            output_data = json.load(f)
+        response = json.dumps(output_data, indent=2)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        response = f"Error reading output file: {e}"
+
+    return {"session_id": session_id, "response": response}
 ```
+
+### Continuing from a Previous Session
+
+To continue an agent session (preserving context from a previous step):
+
+```python
+from bridge_sdk.bridge_sidecar_client import BridgeSidecarClient
+from bridge_sdk.proto.bridge_sidecar_pb2 import ContinueFrom, RunDetail
+
+with BridgeSidecarClient() as client:
+    _, session_id, _ = client.start_agent(
+        prompt=prompt,
+        agent_name="my-agent",
+        continue_from=ContinueFrom(
+            previous_run_detail=RunDetail(
+                agent_name="my-agent",
+                session_id=previous_session_id,
+            ),
+            continuation=ContinueFrom.NoCompactionStrategy(),
+        ),
+    )
+```
+
 
 ## API Reference
 
