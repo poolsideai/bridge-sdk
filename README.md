@@ -4,18 +4,24 @@ A Python SDK for defining workflow steps with dependency management.
 
 ## Quick Start
 
-### 1. Create a new project
+### 1. Set up your project
+
+Clone the repo and create a new branch for your project:
 
 ```bash
-uv init my_project
-cd my_project
-uv add bridge-sdk@git+https://github.com/poolsideai/bridge-sdk.git@v0.1.0
+git clone https://github.com/poolsideai/bridge-sdk.git
+cd bridge-sdk
+git checkout -b my-project
 ```
+
+> **Future plan:** The SDK supports being added as a dependency (`uv add bridge-sdk@git+https://github.com/poolsideai/bridge-sdk.git`), and all the pieces are in place for that workflow. We're currently working on making the repo public — once that's done, you'll be able to add it as a dependency directly in your own project.
 
 ### 2. Set up your project structure
 
+Add your step modules alongside the existing code:
+
 ```
-my_project/
+bridge-sdk/
 ├── pyproject.toml
 └── my_project/
     ├── __init__.py
