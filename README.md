@@ -2,26 +2,50 @@
 
 A Python SDK for defining workflow steps with dependency management.
 
-## Quick Start
+## Installation
 
-### 1. Set up your project
-
-Clone the repo and create a new branch for your project:
+Install as a dependency in your project:
 
 ```bash
-git clone https://github.com/poolsideai/bridge-sdk.git
-cd bridge-sdk
-git checkout -b my-project
+# Using uv (recommended)
+uv add bridge-sdk@git+https://github.com/poolsideai/bridge-sdk.git
+
+# Install a specific version
+uv add bridge-sdk@git+https://github.com/poolsideai/bridge-sdk.git@v0.1.0
 ```
 
-> **Future plan:** The SDK supports being added as a dependency (`uv add bridge-sdk@git+https://github.com/poolsideai/bridge-sdk.git`), and all the pieces are in place for that workflow. We're currently working on making the repo public — once that's done, you'll be able to add it as a dependency directly in your own project.
+Or install directly with pip:
+
+```bash
+pip install git+https://github.com/poolsideai/bridge-sdk.git
+
+# Specific version
+pip install git+https://github.com/poolsideai/bridge-sdk.git@v0.1.0
+```
+
+Or add to your `pyproject.toml` manually:
+
+```toml
+[project]
+dependencies = [
+    "bridge-sdk @ git+https://github.com/poolsideai/bridge-sdk.git@v0.1.0",
+]
+```
+
+## Quick Start
+
+### 1. Create a new project
+
+```bash
+uv init my_project
+cd my_project
+uv add bridge-sdk@git+https://github.com/poolsideai/bridge-sdk.git
+```
 
 ### 2. Set up your project structure
 
-Add your step modules alongside the existing code:
-
 ```
-bridge-sdk/
+my_project/
 ├── pyproject.toml
 └── my_project/
     ├── __init__.py
