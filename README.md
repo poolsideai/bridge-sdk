@@ -14,6 +14,15 @@ uv add bridge-sdk@git+https://github.com/poolsideai/bridge-sdk.git
 
 ### 2. Set up your project structure
 
+Create the package directory and files:
+
+```bash
+mkdir -p my_project
+touch my_project/__init__.py
+```
+
+Your project should look like this:
+
 ```
 my_project/
 ├── pyproject.toml
@@ -51,14 +60,24 @@ def transform_data(
 
 ### 4. Configure Bridge SDK
 
-Add to your `pyproject.toml`:
+Add the following to your `pyproject.toml`:
 
 ```toml
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [tool.bridge]
 modules = ["my_project.steps"]
 ```
 
-> **Note:** Your project must have a `[build-system]` section (created by `uv init`) for modules to be importable.
+> **Note:** The `[build-system]` section is required for your modules to be importable. Recent versions of `uv init` may not generate it by default.
+
+Then sync to install your project in development mode:
+
+```bash
+uv sync
+```
 
 ### 5. Set up `main.py`
 
@@ -145,6 +164,23 @@ def step_b(dep: Annotated[str, step_result(step_a)]) -> str:
 )
 def my_step() -> str:
     return "done"
+```
+
+### Credential Bindings
+
+Use `credential_bindings` to inject credentials from Bridge into your step's environment. The dictionary key is the **credential UUID** registered in Bridge, and the value is the **environment variable name** the credential will be exposed as at runtime.
+
+```python
+@step(
+    credential_bindings={
+        "a1b2c3d4-5678-90ab-cdef-1234567890ab": "MY_API_KEY",
+        "f0e1d2c3-b4a5-6789-0abc-def123456789": "DB_PASSWORD",
+    },
+)
+def my_step() -> str:
+    import os
+    api_key = os.environ["MY_API_KEY"]
+    return f"authenticated"
 ```
 
 ### Async Steps
