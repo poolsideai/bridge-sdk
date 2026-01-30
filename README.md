@@ -2,36 +2,6 @@
 
 A Python SDK for defining workflow steps with dependency management.
 
-## Installation
-
-Install as a dependency in your project:
-
-```bash
-# Using uv (recommended)
-uv add bridge-sdk@git+https://github.com/poolsideai/bridge-sdk.git
-
-# Install a specific version
-uv add bridge-sdk@git+https://github.com/poolsideai/bridge-sdk.git@v0.1.0
-```
-
-Or install directly with pip:
-
-```bash
-pip install git+https://github.com/poolsideai/bridge-sdk.git
-
-# Specific version
-pip install git+https://github.com/poolsideai/bridge-sdk.git@v0.1.0
-```
-
-Or add to your `pyproject.toml` manually:
-
-```toml
-[project]
-dependencies = [
-    "bridge-sdk @ git+https://github.com/poolsideai/bridge-sdk.git@v0.1.0",
-]
-```
-
 ## Quick Start
 
 ### 1. Create a new project
