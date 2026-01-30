@@ -101,6 +101,46 @@ uv run bridge config get-dsl           # Get step definitions
 uv run bridge run --step process_data --input '{"input_data": {"value": "test"}}' --results '{}'
 ```
 
+## Organizing Multiple Step Files
+
+As your project grows, you may want to split steps across multiple files. There are two ways to set this up:
+
+**Option A: List each module explicitly**
+
+```
+my_project/
+├── pyproject.toml
+└── my_project/
+    └── steps/
+        ├── __init__.py
+        ├── ingestion.py
+        └── transform.py
+```
+
+```toml
+[tool.bridge]
+modules = ["my_project.steps.ingestion", "my_project.steps.transform"]
+```
+
+This is the most explicit approach — each module is listed individually. If you forget to add a new module, you'll get a clear error rather than silent missing steps.
+
+**Option B: Re-export from `__init__.py`**
+
+Import all step modules from your package's `__init__.py` and point `tool.bridge` to the package:
+
+```python
+# my_project/steps/__init__.py
+from .ingestion import *
+from .transform import *
+```
+
+```toml
+[tool.bridge]
+modules = ["my_project.steps"]
+```
+
+This keeps your `tool.bridge` config short, but you must remember to update `__init__.py` whenever you add a new step file.
+
 ## CLI Commands
 
 | Command | Description |
