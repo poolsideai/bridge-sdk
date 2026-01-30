@@ -60,7 +60,20 @@ modules = ["my_project.steps"]
 
 > **Note:** Your project must have a `[build-system]` section (created by `uv init`) for modules to be importable.
 
-### 5. Run
+### 5. Set up `main.py`
+
+The Bridge orchestrator expects a `main.py` at the root of your project that imports and runs the CLI:
+
+```python
+from bridge_sdk.cli import main
+
+if __name__ == "__main__":
+    main()
+```
+
+### 6. Run
+
+To test locally, you can use the `uv run bridge` commands:
 
 ```bash
 uv sync
