@@ -5,7 +5,7 @@ import argparse
 import asyncio
 import importlib
 import sys
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, Tuple
 import json
 from pathlib import Path
 
@@ -15,7 +15,7 @@ except ImportError:
     import tomli as tomllib  # type: ignore[import-not-found,no-redef]
 
 from bridge_sdk.step_function import STEP_REGISTRY, StepFunction
-from bridge_sdk.pipeline import Pipeline, PipelineData
+from bridge_sdk.pipeline import PIPELINE_REGISTRY, Pipeline, PipelineData
 
 
 def load_config_modules() -> list[str]:
@@ -65,19 +65,19 @@ def get_modules_from_args(args) -> list[str]:
     return modules
 
 
-def discover_steps(module_paths: list[str]) -> Dict[str, StepFunction]:
-    """Dynamically discover all functions decorated with @step in the specified modules.
+def discover_steps_and_pipelines(
+    module_paths: list[str],
+) -> Tuple[Dict[str, StepFunction], Dict[str, Pipeline]]:
+    """Discover steps and pipelines from the specified modules.
+
+    Imports each module (which triggers @step and @pipeline.step decorators
+    to populate the global registries), then returns both registries.
 
     Args:
-        module_paths: List of module paths to import and discover steps from.
-                      These must be importable Python modules (i.e., installed packages
-                      or modules accessible via PYTHONPATH).
+        module_paths: List of importable Python module paths.
 
-    Note:
-        For modules to be importable, either:
-        1. Install your project in editable mode: `pip install -e .` or `uv sync`
-        2. Add your project to PYTHONPATH: `export PYTHONPATH="${PYTHONPATH}:$(pwd)"`
-        3. Use fully qualified module paths from installed packages
+    Returns:
+        A tuple of (steps_dict, pipelines_dict).
     """
     for module_path in module_paths:
         try:
@@ -90,82 +90,7 @@ def discover_steps(module_paths: list[str]) -> Dict[str, StepFunction]:
             print('  2. Set PYTHONPATH: export PYTHONPATH="${PYTHONPATH}:$(pwd)"')
             print("  3. Use --modules with fully qualified package paths")
             sys.exit(1)
-    return STEP_REGISTRY
-
-
-def discover_steps_and_pipelines(
-    module_paths: list[str],
-) -> Tuple[Dict[str, StepFunction], Dict[str, Pipeline]]:
-    """Discover steps and pipelines from the specified modules.
-
-    Args:
-        module_paths: List of module paths to import and discover from.
-
-    Returns:
-        A tuple of (steps_dict, pipelines_dict) where:
-        - steps_dict: {step_name: StepFunction}
-        - pipelines_dict: {pipeline_name: Pipeline}
-
-    Raises:
-        SystemExit: If a module has a Pipeline and contains bare @step functions
-            (steps not registered via @pipeline.step).
-    """
-    pipelines_found: Dict[str, Pipeline] = {}
-
-    for module_path in module_paths:
-        steps_before = set(STEP_REGISTRY.keys())
-
-        try:
-            module = importlib.import_module(module_path)
-        except ImportError as e:
-            print(f"Error importing module '{module_path}': {e}")
-            print()
-            print("Make sure your step modules are importable. Options:")
-            print("  1. Install your project: pip install -e . (or uv sync)")
-            print('  2. Set PYTHONPATH: export PYTHONPATH="${PYTHONPATH}:$(pwd)"')
-            print("  3. Use --modules with fully qualified package paths")
-            sys.exit(1)
-
-        # Find steps added by this module
-        steps_after = set(STEP_REGISTRY.keys())
-        new_steps = list(steps_after - steps_before)
-
-        # Find all Pipeline instances in the module (any variable name)
-        module_pipelines: List[Pipeline] = []
-        for attr_name in dir(module):
-            if attr_name.startswith("_"):
-                continue
-            attr = getattr(module, attr_name, None)
-            if isinstance(attr, Pipeline):
-                module_pipelines.append(attr)
-
-        # If module has Pipeline(s), validate no bare @step functions exist
-        if module_pipelines:
-            module_file = getattr(module, "__file__", None)
-            bare_steps = []
-            for s in new_steps:
-                sf = STEP_REGISTRY[s]
-                if sf.step_data.pipeline is not None:
-                    continue
-                # Only flag steps actually defined in this module's file,
-                # not steps pulled in transitively via __init__.py or other imports.
-                if module_file and sf.step_data.file_path:
-                    if not module_file.endswith(sf.step_data.file_path):
-                        continue
-                bare_steps.append(s)
-            if bare_steps:
-                pipeline_names = ", ".join(p.name for p in module_pipelines)
-                print(
-                    f"Error: Module '{module_path}' defines Pipeline(s) '{pipeline_names}' "
-                    f"but has bare @step functions: {', '.join(bare_steps)}"
-                )
-                print("Use @pipeline.step instead of @step for steps in a pipeline module.")
-                sys.exit(1)
-
-            for p in module_pipelines:
-                pipelines_found[p.name] = p
-
-    return STEP_REGISTRY, pipelines_found
+    return STEP_REGISTRY, PIPELINE_REGISTRY
 
 
 def cmd_check(args):
@@ -325,7 +250,7 @@ async def cmd_run_step(args):
             "Error: No modules specified. Use --modules or configure [tool.bridge] in pyproject.toml"
         )
         sys.exit(1)
-    steps = discover_steps(modules)
+    steps, _ = discover_steps_and_pipelines(modules)
     step_name = args.step
 
     # 2. Find the step by name
