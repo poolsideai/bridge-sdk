@@ -1,0 +1,10 @@
+repos:
+  - repo: local
+    hooks:
+      - id: uv-lock
+        name: Update uv.lock
+        entry: bash -c 'uv lock && git add uv.lock'
+        language: system
+        files: ^(pyproject\.toml|uv\.lock)$
+        pass_filenames: false
+        description: Automatically update uv.lock when pyproject.toml changes

@@ -39,7 +39,7 @@ class StepData(BaseModel):
     params_from_step_results: Dict[str, str] = Field(default_factory=dict)
     """A dictionary of param name to step name, defining which steps results can be used to populate the param."""
     credential_bindings: Optional[Dict[str, str]] = None
-    """A dictionary of credential name to credential ID, defining which credentials can be used to populate the step."""
+    """A dictionary mapping credential UUIDs (from Bridge) to environment variable names. The key is the credential ID (UUID) registered in Bridge, and the value is the environment variable name the credential will be exposed as."""
 
 
 def create_step_data(
