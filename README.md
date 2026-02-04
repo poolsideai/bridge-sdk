@@ -325,3 +325,23 @@ make sync   # Install dependencies
 make proto  # Generate protocol buffers
 make test   # Run tests
 ```
+
+### Pre-commit Hooks
+
+This project uses pre-commit hooks to automatically update `uv.lock` when `pyproject.toml` changes.
+
+**Setup:**
+```bash
+uv sync
+uv run pre-commit install
+```
+
+**What it does:**
+- Automatically runs `uv lock` when you commit changes to `pyproject.toml`
+- Ensures `uv.lock` is always in sync with dependencies
+- Adds the updated `uv.lock` to your commit automatically
+
+**Manual run:**
+```bash
+uv run pre-commit run --all-files
+```
