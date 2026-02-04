@@ -302,6 +302,29 @@ def test_step_without_rid():
     assert step_data.rid is None
 
 
+def test_bare_step_has_no_pipeline():
+    """Test that bare @step has pipeline=None."""
+
+    @step
+    def bare_step() -> str:
+        return "test"
+
+    step_data = STEP_REGISTRY["bare_step"].step_data
+    assert step_data.pipeline is None
+
+
+def test_pipeline_field_in_serialization():
+    """Test that pipeline field is included in serialization."""
+
+    @step
+    def pipeline_serialize_test() -> str:
+        return "test"
+
+    dumped = STEP_REGISTRY["pipeline_serialize_test"].step_data.model_dump()
+    assert "pipeline" in dumped
+    assert dumped["pipeline"] is None
+
+
 def test_step_rid_in_serialization():
     """Test that rid is included in step data serialization."""
     import json

@@ -15,7 +15,6 @@ from bridge_sdk import (
     STEP_REGISTRY,
 )
 from bridge_sdk.cli import (
-    compute_pipeline_data,
     discover_steps_and_pipelines,
 )
 
@@ -70,7 +69,6 @@ class TestPipelineClass:
 
         assert pipeline.name == "test_pipeline"
         assert pipeline.description is None
-        assert pipeline._module_path is None
 
     def test_pipeline_instantiation_with_all_fields(self):
         """Test that Pipeline can be instantiated with all fields."""
@@ -150,374 +148,222 @@ class TestPipelineDataModel:
 
     def test_pipeline_data_minimal(self):
         """Test PipelineData with minimal required fields."""
-        data = PipelineData(
-            name="minimal_pipeline",
-            module_path="test.module",
-        )
+        data = PipelineData(name="minimal_pipeline")
 
         assert data.name == "minimal_pipeline"
-        assert data.module_path == "test.module"
         assert data.description is None
-        assert data.steps == []
-        assert data.dag == {}
-        assert data.root_steps == []
-        assert data.leaf_steps == []
-        assert data.input_json_schema == {}
-        assert data.output_json_schema == {}
+        assert data.rid is None
 
     def test_pipeline_data_full(self):
         """Test PipelineData with all fields populated."""
         data = PipelineData(
             name="full_pipeline",
+            rid="test-rid",
             description="A complete pipeline",
-            module_path="pipelines.full",
-            steps=["step_a", "step_b", "step_c"],
-            dag={
-                "step_a": [],
-                "step_b": ["step_a"],
-                "step_c": ["step_b"],
-            },
-            root_steps=["step_a"],
-            leaf_steps=["step_c"],
-            input_json_schema={"step_a": {"type": "object"}},
-            output_json_schema={"step_c": {"type": "string"}},
         )
 
         assert data.name == "full_pipeline"
+        assert data.rid == "test-rid"
         assert data.description == "A complete pipeline"
-        assert len(data.steps) == 3
-        assert data.dag["step_b"] == ["step_a"]
-        assert data.root_steps == ["step_a"]
-        assert data.leaf_steps == ["step_c"]
 
     def test_pipeline_data_serialization(self):
         """Test that PipelineData can be serialized to JSON."""
         data = PipelineData(
             name="serializable_pipeline",
-            module_path="test.serialize",
-            steps=["step_x"],
-            dag={"step_x": []},
-            root_steps=["step_x"],
-            leaf_steps=["step_x"],
+            description="test",
         )
 
-        # model_dump should return JSON-serializable dict
         dumped = data.model_dump()
         json_str = json.dumps(dumped)
 
-        # Should round-trip correctly
         parsed = json.loads(json_str)
         assert parsed["name"] == "serializable_pipeline"
-        assert parsed["steps"] == ["step_x"]
+        # Stripped-down PipelineData should not have dag, steps, etc.
+        assert "dag" not in parsed
+        assert "steps" not in parsed
+        assert "root_steps" not in parsed
+        assert "leaf_steps" not in parsed
+        assert "input_json_schema" not in parsed
+        assert "output_json_schema" not in parsed
+        assert "module_path" not in parsed
 
     def test_pipeline_data_with_rid(self):
         """Test that PipelineData includes rid when provided."""
         data = PipelineData(
             name="rid_pipeline",
             rid="550e8400-e29b-41d4-a716-446655440000",
-            module_path="test.rid",
         )
 
         assert data.rid == "550e8400-e29b-41d4-a716-446655440000"
 
-        # Verify serialization includes rid
         dumped = data.model_dump()
         assert dumped["rid"] == "550e8400-e29b-41d4-a716-446655440000"
 
     def test_pipeline_data_rid_optional(self):
         """Test that PipelineData rid is optional and defaults to None."""
-        data = PipelineData(
-            name="no_rid_pipeline",
-            module_path="test.no_rid",
-        )
-
+        data = PipelineData(name="no_rid_pipeline")
         assert data.rid is None
 
 
 # =============================================================================
-# DAG Computation Tests
+# Pipeline.step() Decorator Tests
 # =============================================================================
 
 
-class TestDagComputation:
-    """Tests for compute_pipeline_data() function."""
+class TestPipelineStepDecorator:
+    """Tests for the @pipeline.step decorator."""
 
-    def test_linear_dag_computation(self):
-        """Test DAG computation for a linear pipeline (A -> B -> C)."""
+    def test_pipeline_step_no_parens(self):
+        """Test @pipeline.step with no parentheses."""
+        pipeline = Pipeline(name="no_parens_pipeline")
 
-        # Create steps with linear dependencies
-        @step(name="step_a")
-        def step_a() -> IntermediateModel:
-            return IntermediateModel(processed="a")
+        @pipeline.step
+        def my_step() -> str:
+            return "test"
 
-        @step(name="step_b")
-        def step_b(
-            input: Annotated[IntermediateModel, step_result("step_a")],
-        ) -> IntermediateModel:
-            return IntermediateModel(processed="b")
+        assert "my_step" in STEP_REGISTRY
+        assert STEP_REGISTRY["my_step"].step_data.pipeline == "no_parens_pipeline"
 
-        @step(name="step_c")
-        def step_c(
-            input: Annotated[IntermediateModel, step_result("step_b")],
-        ) -> OutputModel:
-            return OutputModel(result="c")
+    def test_pipeline_step_empty_parens(self):
+        """Test @pipeline.step() with empty parentheses."""
+        pipeline = Pipeline(name="empty_parens_pipeline")
 
-        pipeline = Pipeline(name="linear_pipeline")
+        @pipeline.step()
+        def my_step() -> str:
+            return "test"
 
-        pipeline_data = compute_pipeline_data(
-            pipeline=pipeline,
-            module_path="test.linear",
-            module_steps=["step_a", "step_b", "step_c"],
-            step_registry=STEP_REGISTRY,
+        assert "my_step" in STEP_REGISTRY
+        assert STEP_REGISTRY["my_step"].step_data.pipeline == "empty_parens_pipeline"
+
+    def test_pipeline_step_with_kwargs(self):
+        """Test @pipeline.step(name=..., ...) with keyword arguments."""
+        pipeline = Pipeline(name="kwargs_pipeline")
+
+        @pipeline.step(
+            name="custom_name",
+            rid="test-rid",
+            description="A test step",
+            setup_script="setup.sh",
+            post_execution_script="cleanup.sh",
+            metadata={"type": "test"},
+            sandbox_id="sandbox-1",
         )
+        def my_step() -> str:
+            return "test"
 
-        assert pipeline_data.name == "linear_pipeline"
-        assert set(pipeline_data.steps) == {"step_a", "step_b", "step_c"}
-        assert pipeline_data.dag["step_a"] == []
-        assert pipeline_data.dag["step_b"] == ["step_a"]
-        assert pipeline_data.dag["step_c"] == ["step_b"]
-        assert pipeline_data.root_steps == ["step_a"]
-        assert pipeline_data.leaf_steps == ["step_c"]
+        assert "custom_name" in STEP_REGISTRY
+        sd = STEP_REGISTRY["custom_name"].step_data
+        assert sd.pipeline == "kwargs_pipeline"
+        assert sd.rid == "test-rid"
+        assert sd.description == "A test step"
+        assert sd.setup_script == "setup.sh"
+        assert sd.post_execution_script == "cleanup.sh"
+        assert sd.metadata == {"type": "test"}
+        assert sd.execution_environment_id == "sandbox-1"
 
-    def test_fan_in_dag_computation(self):
-        """Test DAG computation for fan-in pattern (A, B -> C)."""
+    def test_pipeline_step_data_pipeline_field(self):
+        """Test that step_data.pipeline is correctly set."""
+        pipeline = Pipeline(name="field_test_pipeline")
 
-        @step(name="fan_a")
-        def fan_a() -> IntermediateModel:
-            return IntermediateModel(processed="a")
+        @pipeline.step
+        def step_a() -> str:
+            return "a"
 
-        @step(name="fan_b")
-        def fan_b() -> IntermediateModel:
-            return IntermediateModel(processed="b")
+        @pipeline.step()
+        def step_b() -> str:
+            return "b"
 
-        @step(name="fan_c")
-        def fan_c(
-            from_a: Annotated[IntermediateModel, step_result("fan_a")],
-            from_b: Annotated[IntermediateModel, step_result("fan_b")],
-        ) -> OutputModel:
-            return OutputModel(result="c")
+        assert STEP_REGISTRY["step_a"].step_data.pipeline == "field_test_pipeline"
+        assert STEP_REGISTRY["step_b"].step_data.pipeline == "field_test_pipeline"
 
-        pipeline = Pipeline(name="fan_in_pipeline")
+    def test_pipeline_steps_in_registry(self):
+        """Test that pipeline steps are discoverable via STEP_REGISTRY."""
+        pipeline = Pipeline(name="tracking_pipeline")
 
-        pipeline_data = compute_pipeline_data(
-            pipeline=pipeline,
-            module_path="test.fan_in",
-            module_steps=["fan_a", "fan_b", "fan_c"],
-            step_registry=STEP_REGISTRY,
-        )
+        @pipeline.step
+        def step_one() -> str:
+            return "one"
 
-        # Both A and B are root steps (no dependencies)
-        assert set(pipeline_data.root_steps) == {"fan_a", "fan_b"}
-        # C is the only leaf step
-        assert pipeline_data.leaf_steps == ["fan_c"]
-        # C depends on both A and B
-        assert set(pipeline_data.dag["fan_c"]) == {"fan_a", "fan_b"}
+        @pipeline.step(name="step_two_custom")
+        def step_two() -> str:
+            return "two"
 
-    def test_fan_out_dag_computation(self):
-        """Test DAG computation for fan-out pattern (A -> B, C)."""
+        pipeline_steps = [
+            name for name, sf in STEP_REGISTRY.items()
+            if sf.step_data.pipeline == "tracking_pipeline"
+        ]
+        assert set(pipeline_steps) == {"step_one", "step_two_custom"}
 
-        @step(name="fanout_a")
-        def fanout_a() -> IntermediateModel:
-            return IntermediateModel(processed="a")
+    def test_pipeline_step_with_dependencies(self):
+        """Test @pipeline.step with step_result dependencies."""
+        pipeline = Pipeline(name="dep_pipeline")
 
-        @step(name="fanout_b")
-        def fanout_b(
-            input: Annotated[IntermediateModel, step_result("fanout_a")],
-        ) -> OutputModel:
-            return OutputModel(result="b")
-
-        @step(name="fanout_c")
-        def fanout_c(
-            input: Annotated[IntermediateModel, step_result("fanout_a")],
-        ) -> OutputModel:
-            return OutputModel(result="c")
-
-        pipeline = Pipeline(name="fan_out_pipeline")
-
-        pipeline_data = compute_pipeline_data(
-            pipeline=pipeline,
-            module_path="test.fan_out",
-            module_steps=["fanout_a", "fanout_b", "fanout_c"],
-            step_registry=STEP_REGISTRY,
-        )
-
-        # A is the only root step
-        assert pipeline_data.root_steps == ["fanout_a"]
-        # B and C are both leaf steps
-        assert set(pipeline_data.leaf_steps) == {"fanout_b", "fanout_c"}
-
-    def test_diamond_dag_computation(self):
-        """Test DAG computation for diamond pattern (A -> B, C -> D)."""
-
-        @step(name="diamond_a")
-        def diamond_a() -> IntermediateModel:
-            return IntermediateModel(processed="a")
-
-        @step(name="diamond_b")
-        def diamond_b(
-            input: Annotated[IntermediateModel, step_result("diamond_a")],
-        ) -> IntermediateModel:
-            return IntermediateModel(processed="b")
-
-        @step(name="diamond_c")
-        def diamond_c(
-            input: Annotated[IntermediateModel, step_result("diamond_a")],
-        ) -> IntermediateModel:
-            return IntermediateModel(processed="c")
-
-        @step(name="diamond_d")
-        def diamond_d(
-            from_b: Annotated[IntermediateModel, step_result("diamond_b")],
-            from_c: Annotated[IntermediateModel, step_result("diamond_c")],
-        ) -> OutputModel:
-            return OutputModel(result="d")
-
-        pipeline = Pipeline(name="diamond_pipeline")
-
-        pipeline_data = compute_pipeline_data(
-            pipeline=pipeline,
-            module_path="test.diamond",
-            module_steps=["diamond_a", "diamond_b", "diamond_c", "diamond_d"],
-            step_registry=STEP_REGISTRY,
-        )
-
-        assert pipeline_data.root_steps == ["diamond_a"]
-        assert pipeline_data.leaf_steps == ["diamond_d"]
-        assert set(pipeline_data.dag["diamond_d"]) == {"diamond_b", "diamond_c"}
-
-    def test_single_step_pipeline(self):
-        """Test DAG computation for a pipeline with a single step."""
-
-        @step(name="solo_step")
-        def solo_step(input: InputModel) -> OutputModel:
-            return OutputModel(result=input.value)
-
-        pipeline = Pipeline(name="solo_pipeline")
-
-        pipeline_data = compute_pipeline_data(
-            pipeline=pipeline,
-            module_path="test.solo",
-            module_steps=["solo_step"],
-            step_registry=STEP_REGISTRY,
-        )
-
-        # Single step is both root and leaf
-        assert pipeline_data.root_steps == ["solo_step"]
-        assert pipeline_data.leaf_steps == ["solo_step"]
-        assert pipeline_data.dag["solo_step"] == []
-
-
-# =============================================================================
-# Input/Output Schema Tests
-# =============================================================================
-
-
-class TestSchemaComputation:
-    """Tests for input/output schema computation."""
-
-    def test_input_schema_from_root_steps(self):
-        """Test that input schemas are derived from root step parameters."""
-
-        @step(name="schema_root")
-        def schema_root(input_data: InputModel, count: int) -> IntermediateModel:
-            return IntermediateModel(processed=input_data.value)
-
-        @step(name="schema_leaf")
-        def schema_leaf(
-            data: Annotated[IntermediateModel, step_result("schema_root")],
-        ) -> OutputModel:
-            return OutputModel(result=data.processed)
-
-        pipeline = Pipeline(name="schema_pipeline")
-
-        pipeline_data = compute_pipeline_data(
-            pipeline=pipeline,
-            module_path="test.schema",
-            module_steps=["schema_root", "schema_leaf"],
-            step_registry=STEP_REGISTRY,
-        )
-
-        # Input schema should contain root step's params
-        assert "schema_root" in pipeline_data.input_json_schema
-        root_schema = pipeline_data.input_json_schema["schema_root"]
-        assert "properties" in root_schema
-        assert "input_data" in root_schema["properties"]
-        assert "count" in root_schema["properties"]
-
-        # Leaf step should not be in input schema
-        assert "schema_leaf" not in pipeline_data.input_json_schema
-
-    def test_output_schema_from_leaf_steps(self):
-        """Test that output schemas are derived from leaf step returns."""
-
-        @step(name="out_root")
-        def out_root() -> IntermediateModel:
+        @pipeline.step
+        def root_step() -> IntermediateModel:
             return IntermediateModel(processed="root")
 
-        @step(name="out_leaf")
-        def out_leaf(
-            data: Annotated[IntermediateModel, step_result("out_root")],
+        @pipeline.step
+        def child_step(
+            data: Annotated[IntermediateModel, step_result(root_step)],
         ) -> OutputModel:
             return OutputModel(result=data.processed)
 
-        pipeline = Pipeline(name="output_pipeline")
+        assert STEP_REGISTRY["root_step"].step_data.pipeline == "dep_pipeline"
+        assert STEP_REGISTRY["child_step"].step_data.pipeline == "dep_pipeline"
+        assert "root_step" in STEP_REGISTRY["child_step"].step_data.depends_on
 
-        pipeline_data = compute_pipeline_data(
-            pipeline=pipeline,
-            module_path="test.output",
-            module_steps=["out_root", "out_leaf"],
-            step_registry=STEP_REGISTRY,
-        )
+    def test_pipeline_step_callable(self):
+        """Test that @pipeline.step decorated functions are still callable."""
+        pipeline = Pipeline(name="callable_pipeline")
 
-        # Output schema should contain leaf step's return
-        assert "out_leaf" in pipeline_data.output_json_schema
-        # Root step should not be in output schema
-        assert "out_root" not in pipeline_data.output_json_schema
+        @pipeline.step
+        def add(a: int, b: int) -> int:
+            return a + b
 
-    def test_multiple_root_and_leaf_schemas(self):
-        """Test schemas with multiple root and leaf steps."""
+        assert add(1, 2) == 3
 
-        @step(name="multi_root_a")
-        def multi_root_a(input_a: InputModel) -> IntermediateModel:
-            return IntermediateModel(processed="a")
+    def test_multiple_pipelines_in_module(self):
+        """Test that multiple pipelines can coexist and each tracks its own steps."""
+        pipeline_a = Pipeline(name="pipeline_a")
+        pipeline_b = Pipeline(name="pipeline_b")
 
-        @step(name="multi_root_b")
-        def multi_root_b(input_b: AnotherInputModel) -> IntermediateModel:
-            return IntermediateModel(processed="b")
+        @pipeline_a.step
+        def step_for_a() -> str:
+            return "a"
 
-        @step(name="multi_leaf_x")
-        def multi_leaf_x(
-            data: Annotated[IntermediateModel, step_result("multi_root_a")],
-        ) -> OutputModel:
-            return OutputModel(result="x")
+        @pipeline_b.step
+        def step_for_b() -> str:
+            return "b"
 
-        @step(name="multi_leaf_y")
-        def multi_leaf_y(
-            data: Annotated[IntermediateModel, step_result("multi_root_b")],
-        ) -> OutputModel:
-            return OutputModel(result="y")
+        assert STEP_REGISTRY["step_for_a"].step_data.pipeline == "pipeline_a"
+        assert STEP_REGISTRY["step_for_b"].step_data.pipeline == "pipeline_b"
 
-        pipeline = Pipeline(name="multi_pipeline")
 
-        pipeline_data = compute_pipeline_data(
-            pipeline=pipeline,
-            module_path="test.multi",
-            module_steps=[
-                "multi_root_a",
-                "multi_root_b",
-                "multi_leaf_x",
-                "multi_leaf_y",
-            ],
-            step_registry=STEP_REGISTRY,
-        )
+# =============================================================================
+# Bare @step Backward Compatibility Tests
+# =============================================================================
 
-        # Both roots should have input schemas
-        assert "multi_root_a" in pipeline_data.input_json_schema
-        assert "multi_root_b" in pipeline_data.input_json_schema
 
-        # Both leaves should have output schemas
-        assert "multi_leaf_x" in pipeline_data.output_json_schema
-        assert "multi_leaf_y" in pipeline_data.output_json_schema
+class TestBareStepBackwardCompat:
+    """Tests for standalone @step decorator (no pipeline)."""
+
+    def test_bare_step_pipeline_is_none(self):
+        """Test that bare @step has pipeline=None."""
+
+        @step
+        def standalone_step() -> str:
+            return "standalone"
+
+        assert STEP_REGISTRY["standalone_step"].step_data.pipeline is None
+
+    def test_bare_step_with_parens(self):
+        """Test that bare @step() has pipeline=None."""
+
+        @step(name="bare_parens")
+        def standalone_step() -> str:
+            return "standalone"
+
+        assert STEP_REGISTRY["bare_parens"].step_data.pipeline is None
 
 
 # =============================================================================
@@ -530,34 +376,34 @@ class TestDslOutputFormat:
 
     def test_dsl_output_structure(self):
         """Test that DSL output has the correct top-level structure."""
+        pipeline = Pipeline(name="dsl_test_pipeline", description="Test pipeline")
 
-        # Create a simple pipeline with steps
-        @step(name="dsl_step_a")
+        @pipeline.step
         def dsl_step_a() -> IntermediateModel:
             return IntermediateModel(processed="a")
 
-        @step(name="dsl_step_b")
+        @pipeline.step
         def dsl_step_b(
-            input: Annotated[IntermediateModel, step_result("dsl_step_a")],
+            input: Annotated[IntermediateModel, step_result(dsl_step_a)],
         ) -> OutputModel:
             return OutputModel(result="b")
 
-        pipeline = Pipeline(name="dsl_test_pipeline", description="Test pipeline")
-
-        pipeline_data = compute_pipeline_data(
-            pipeline=pipeline,
-            module_path="test.dsl",
-            module_steps=["dsl_step_a", "dsl_step_b"],
-            step_registry=STEP_REGISTRY,
-        )
-
         # Build the full DSL output structure
+        steps_dict = {
+            name: STEP_REGISTRY[name].step_data.model_dump()
+            for name in ["dsl_step_a", "dsl_step_b"]
+        }
+        pipelines_dict = {
+            "dsl_test_pipeline": PipelineData(
+                name=pipeline.name,
+                rid=pipeline.rid,
+                description=pipeline.description,
+            ).model_dump()
+        }
+
         dsl_output = {
-            "steps": {
-                name: STEP_REGISTRY[name].step_data.model_dump()
-                for name in ["dsl_step_a", "dsl_step_b"]
-            },
-            "pipelines": {"dsl_test_pipeline": pipeline_data.model_dump()},
+            "steps": steps_dict,
+            "pipelines": pipelines_dict,
         }
 
         # Verify structure
@@ -567,47 +413,44 @@ class TestDslOutputFormat:
         # Verify steps content
         assert "dsl_step_a" in dsl_output["steps"]
         assert "dsl_step_b" in dsl_output["steps"]
+        assert dsl_output["steps"]["dsl_step_a"]["pipeline"] == "dsl_test_pipeline"
+        assert dsl_output["steps"]["dsl_step_b"]["pipeline"] == "dsl_test_pipeline"
         assert "depends_on" in dsl_output["steps"]["dsl_step_a"]
         assert "depends_on" in dsl_output["steps"]["dsl_step_b"]
 
-        # Verify pipeline content
+        # Verify pipeline content (metadata only)
         pipeline_output = dsl_output["pipelines"]["dsl_test_pipeline"]
         assert pipeline_output["name"] == "dsl_test_pipeline"
         assert pipeline_output["description"] == "Test pipeline"
-        assert "dag" in pipeline_output
-        assert "root_steps" in pipeline_output
-        assert "leaf_steps" in pipeline_output
-        assert "input_json_schema" in pipeline_output
-        assert "output_json_schema" in pipeline_output
+        assert "dag" not in pipeline_output
+        assert "root_steps" not in pipeline_output
+        assert "leaf_steps" not in pipeline_output
 
     def test_dsl_output_json_serializable(self):
         """Test that the complete DSL output is JSON serializable."""
+        pipeline = Pipeline(name="json_pipeline")
 
-        @step(name="json_step")
+        @pipeline.step
         def json_step(data: InputModel) -> OutputModel:
             return OutputModel(result=data.value)
 
-        pipeline = Pipeline(name="json_pipeline")
-
-        pipeline_data = compute_pipeline_data(
-            pipeline=pipeline,
-            module_path="test.json",
-            module_steps=["json_step"],
-            step_registry=STEP_REGISTRY,
-        )
-
         dsl_output = {
             "steps": {"json_step": STEP_REGISTRY["json_step"].step_data.model_dump()},
-            "pipelines": {"json_pipeline": pipeline_data.model_dump()},
+            "pipelines": {
+                "json_pipeline": PipelineData(
+                    name=pipeline.name,
+                    rid=pipeline.rid,
+                    description=pipeline.description,
+                ).model_dump()
+            },
         }
 
-        # Should not raise
         json_str = json.dumps(dsl_output, indent=2)
         assert len(json_str) > 0
 
-        # Should round-trip
         parsed = json.loads(json_str)
         assert parsed["pipelines"]["json_pipeline"]["name"] == "json_pipeline"
+        assert parsed["steps"]["json_step"]["pipeline"] == "json_pipeline"
 
 
 # =============================================================================
@@ -619,51 +462,24 @@ class TestPipelineIntegration:
     """Integration tests for the complete pipeline workflow."""
 
     def test_pipeline_with_step_object_references(self):
-        """Test that step_result works with StepFunction objects."""
+        """Test that step_result works with StepFunction objects via @pipeline.step."""
+        pipeline = Pipeline(name="ref_pipeline")
 
-        @step(name="ref_source")
+        @pipeline.step
         def ref_source() -> IntermediateModel:
             return IntermediateModel(processed="source")
 
-        @step(name="ref_target")
+        @pipeline.step
         def ref_target(
-            # Reference the step object directly, not by name string
             data: Annotated[IntermediateModel, step_result(ref_source)],
         ) -> OutputModel:
             return OutputModel(result=data.processed)
 
-        pipeline = Pipeline(name="ref_pipeline")
-
-        pipeline_data = compute_pipeline_data(
-            pipeline=pipeline,
-            module_path="test.ref",
-            module_steps=["ref_source", "ref_target"],
-            step_registry=STEP_REGISTRY,
-        )
-
-        # The dependency should be correctly resolved to "ref_source"
-        assert "ref_source" in pipeline_data.dag["ref_target"]
-
-    def test_empty_pipeline(self):
-        """Test pipeline with no steps in the module."""
-        pipeline = Pipeline(name="empty_pipeline")
-
-        pipeline_data = compute_pipeline_data(
-            pipeline=pipeline,
-            module_path="test.empty",
-            module_steps=[],
-            step_registry=STEP_REGISTRY,
-        )
-
-        assert pipeline_data.name == "empty_pipeline"
-        assert pipeline_data.steps == []
-        assert pipeline_data.dag == {}
-        assert pipeline_data.root_steps == []
-        assert pipeline_data.leaf_steps == []
+        assert "ref_source" in STEP_REGISTRY["ref_target"].step_data.depends_on
+        assert STEP_REGISTRY["ref_target"].step_data.pipeline == "ref_pipeline"
 
     def test_pipeline_any_variable_name(self):
         """Test that Pipeline can be assigned to any variable name."""
-        # Use a non-standard variable name
         my_custom_pipeline_name = Pipeline(
             name="custom_named_pipeline",
             description="Pipeline with custom variable name",
@@ -682,9 +498,21 @@ class TestPipelineIntegration:
 class TestModuleDiscovery:
     """Tests for pipeline discovery from modules."""
 
+    @pytest.fixture(autouse=True)
+    def clean_example_modules(self):
+        """Ensure example modules are re-imported fresh for discovery tests."""
+        import sys
+
+        mods_to_remove = [k for k in sys.modules if k.startswith("examples.")]
+        for m in mods_to_remove:
+            del sys.modules[m]
+        yield
+        mods_to_remove = [k for k in sys.modules if k.startswith("examples.")]
+        for m in mods_to_remove:
+            del sys.modules[m]
+
     def test_discover_pipeline_from_module(self):
         """Test that discover_steps_and_pipelines finds Pipeline instances."""
-        # This test uses the examples.agent_example module
         steps, pipelines = discover_steps_and_pipelines(["examples.agent_example"])
 
         # Should find at least one pipeline
@@ -692,9 +520,23 @@ class TestModuleDiscovery:
 
         # The agent_example pipeline should be found
         assert "agent_example" in pipelines
-        pipeline, module_path, module_steps = pipelines["agent_example"]
+        pipeline = pipelines["agent_example"]
         assert pipeline.name == "agent_example"
-        assert module_path == "examples.agent_example"
+
+        # Steps belonging to this pipeline should have pipeline field set
+        pipeline_steps = [
+            name for name, sf in STEP_REGISTRY.items()
+            if sf.step_data.pipeline == "agent_example"
+        ]
+        assert len(pipeline_steps) > 0
+
+    def test_discover_standalone_steps_module(self):
+        """Test that modules without pipelines work (backward compat)."""
+        steps, pipelines = discover_steps_and_pipelines(["examples.example"])
+
+        # No pipelines in example.py
+        # (example.py only has standalone steps)
+        assert len(steps) > 0
 
 
 if __name__ == "__main__":

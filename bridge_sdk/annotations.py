@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
-    from bridge_sdk.step import StepFunction
+    from bridge_sdk.step_function import StepFunction
 
 STEP_RESULT_PREFIX = "step:"
 

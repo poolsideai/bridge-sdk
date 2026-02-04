@@ -2,13 +2,13 @@
 
 This module shows how to:
 1. Define a Pipeline instance (exported as 'pipeline')
-2. Define steps with @step decorator
+2. Define steps with @pipeline.step decorator
 3. Use step_result annotations to create dependencies between steps
 """
 
 from typing import Annotated, Optional
 
-from bridge_sdk import Pipeline, step, step_result
+from bridge_sdk import Pipeline, step_result
 from bridge_sdk.bridge_sidecar_client import BridgeSidecarClient
 from bridge_sdk.proto.bridge_sidecar_pb2 import ContinueFrom, RunDetail
 from pydantic import BaseModel
@@ -18,7 +18,7 @@ from pydantic import BaseModel
 # Pipeline Definition
 # =============================================================================
 # Each module can contain at most one Pipeline instance (any variable name).
-# All @step decorated functions in this module will be associated with it.
+# Use @pipeline.step to associate steps with this pipeline.
 
 pipeline = Pipeline(
     name="agent_example",
@@ -63,7 +63,7 @@ class Step2Output(BaseModel):
 # =============================================================================
 
 
-@step(
+@pipeline.step(
     setup_script="scripts/setup_test.sh",
     post_execution_script="scripts/post_execution_test.sh",
     metadata={"type": "agent"},
@@ -75,7 +75,7 @@ def hello_world_agent() -> HelloWorldResult:
         return HelloWorldResult(session_id=session_id, res=res)
 
 
-@step(
+@pipeline.step(
     setup_script="scripts/setup_test.sh",
     post_execution_script="scripts/post_execution_test.sh",
     metadata={"type": "agent"},
@@ -105,14 +105,14 @@ def continuation_agent(
         return session_id
 
 
-@step
+@pipeline.step
 def step_1(input_data: Step1Input) -> Step1Output:
     """A simple step with no dependencies (root step)."""
     print(input_data)
     return Step1Output(result="done")
 
 
-@step
+@pipeline.step
 def step2(
     input_data: Annotated[Step1Output, step_result(step_1)],
     some_other_param: Step2Input,

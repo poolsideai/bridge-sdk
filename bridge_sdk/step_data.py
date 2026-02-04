@@ -13,6 +13,8 @@ from bridge_sdk.utils import get_relative_path
 class StepData(BaseModel):
     name: str
     """The name of the step."""
+    pipeline: Optional[str] = None
+    """The name of the pipeline this step belongs to, if any."""
     rid: Optional[str] = None
     """Optional stable resource identifier (UUID). If provided, the backend will use this rid
     instead of generating a new one. This enables renaming steps while preserving identity."""
@@ -53,6 +55,7 @@ def create_step_data(
     metadata: dict[str, Any] | None = None,
     sandbox_id: str | None = None,
     credential_bindings: dict[str, str] | None = None,
+    pipeline_name: str | None = None,
 ) -> StepData:
     """Create a StepData object from a step function.
 
@@ -69,6 +72,7 @@ def create_step_data(
         metadata: Optional arbitrary metadata.
         sandbox_id: Optional execution environment ID.
         credential_bindings: Optional credential bindings.
+        pipeline_name: Optional pipeline name this step belongs to.
 
     Returns:
         A StepData object with all metadata.
@@ -94,6 +98,7 @@ def create_step_data(
 
     return StepData(
         name=name or function_schema.name,
+        pipeline=pipeline_name,
         rid=rid,
         description=description,
         setup_script=setup_script,

@@ -5,7 +5,6 @@ import argparse
 import asyncio
 import importlib
 import sys
-from types import ModuleType
 from typing import Dict, Any, List, Tuple
 import json
 from pathlib import Path
@@ -15,8 +14,8 @@ try:
 except ImportError:
     import tomli as tomllib  # type: ignore[import-not-found,no-redef]
 
-from bridge_sdk import STEP_REGISTRY, StepFunction
-from bridge_sdk.pipeline import Pipeline, PipelineData, PIPELINE_REGISTRY
+from bridge_sdk.step_function import STEP_REGISTRY, StepFunction
+from bridge_sdk.pipeline import Pipeline, PipelineData
 
 
 def load_config_modules() -> list[str]:
@@ -96,7 +95,7 @@ def discover_steps(module_paths: list[str]) -> Dict[str, StepFunction]:
 
 def discover_steps_and_pipelines(
     module_paths: list[str],
-) -> Tuple[Dict[str, StepFunction], Dict[str, Tuple[Pipeline, str, List[str]]]]:
+) -> Tuple[Dict[str, StepFunction], Dict[str, Pipeline]]:
     """Discover steps and pipelines from the specified modules.
 
     Args:
@@ -105,16 +104,14 @@ def discover_steps_and_pipelines(
     Returns:
         A tuple of (steps_dict, pipelines_dict) where:
         - steps_dict: {step_name: StepFunction}
-        - pipelines_dict: {pipeline_name: (Pipeline, module_path, [step_names])}
+        - pipelines_dict: {pipeline_name: Pipeline}
 
     Raises:
-        SystemExit: If a module contains more than one Pipeline instance.
+        SystemExit: If a module has a Pipeline and contains bare @step functions
+            (steps not registered via @pipeline.step).
     """
-    # Track which steps belong to which module
-    module_steps: Dict[str, List[str]] = {}  # module_path -> [step_names]
-    pipelines_found: Dict[str, Tuple[Pipeline, str, List[str]]] = {}
+    pipelines_found: Dict[str, Pipeline] = {}
 
-    # Track step count before each module import
     for module_path in module_paths:
         steps_before = set(STEP_REGISTRY.keys())
 
@@ -132,97 +129,43 @@ def discover_steps_and_pipelines(
         # Find steps added by this module
         steps_after = set(STEP_REGISTRY.keys())
         new_steps = list(steps_after - steps_before)
-        module_steps[module_path] = new_steps
 
         # Find all Pipeline instances in the module (any variable name)
-        pipeline_instances: List[Tuple[str, Pipeline]] = []
+        module_pipelines: List[Pipeline] = []
         for attr_name in dir(module):
             if attr_name.startswith("_"):
                 continue
             attr = getattr(module, attr_name, None)
             if isinstance(attr, Pipeline):
-                pipeline_instances.append((attr_name, attr))
+                module_pipelines.append(attr)
 
-        # Validate: at most one Pipeline per module
-        if len(pipeline_instances) > 1:
-            var_names = [name for name, _ in pipeline_instances]
-            print(
-                f"Error: Module '{module_path}' contains multiple Pipeline instances: "
-                f"{', '.join(var_names)}"
-            )
-            print("Each module can only define one Pipeline.")
-            sys.exit(1)
+        # If module has Pipeline(s), validate no bare @step functions exist
+        if module_pipelines:
+            module_file = getattr(module, "__file__", None)
+            bare_steps = []
+            for s in new_steps:
+                sf = STEP_REGISTRY[s]
+                if sf.step_data.pipeline is not None:
+                    continue
+                # Only flag steps actually defined in this module's file,
+                # not steps pulled in transitively via __init__.py or other imports.
+                if module_file and sf.step_data.file_path:
+                    if not module_file.endswith(sf.step_data.file_path):
+                        continue
+                bare_steps.append(s)
+            if bare_steps:
+                pipeline_names = ", ".join(p.name for p in module_pipelines)
+                print(
+                    f"Error: Module '{module_path}' defines Pipeline(s) '{pipeline_names}' "
+                    f"but has bare @step functions: {', '.join(bare_steps)}"
+                )
+                print("Use @pipeline.step instead of @step for steps in a pipeline module.")
+                sys.exit(1)
 
-        # Register the pipeline if found
-        if pipeline_instances:
-            var_name, pipeline_instance = pipeline_instances[0]
-            pipeline_instance._module_path = module_path
-            pipelines_found[pipeline_instance.name] = (
-                pipeline_instance,
-                module_path,
-                new_steps,
-            )
+            for p in module_pipelines:
+                pipelines_found[p.name] = p
 
     return STEP_REGISTRY, pipelines_found
-
-
-def compute_pipeline_data(
-    pipeline: Pipeline,
-    module_path: str,
-    module_steps: List[str],
-    step_registry: Dict[str, StepFunction],
-) -> PipelineData:
-    """Build PipelineData from a pipeline and its module's steps.
-
-    Args:
-        pipeline: The Pipeline instance.
-        module_path: The module path where the pipeline is defined.
-        module_steps: List of step names defined in the same module.
-        step_registry: The global step registry.
-
-    Returns:
-        A PipelineData object with computed DAG, root/leaf steps, and schemas.
-    """
-    # Build DAG from step dependencies
-    dag: Dict[str, List[str]] = {}
-    for step_name in module_steps:
-        if step_name in step_registry:
-            step_func = step_registry[step_name]
-            dag[step_name] = list(step_func.step_data.depends_on)
-
-    # Root steps: no dependencies (no step_result annotations)
-    root_steps = [name for name, deps in dag.items() if not deps]
-
-    # Leaf steps: not referenced in any other step's depends_on
-    all_deps: set[str] = set()
-    for deps in dag.values():
-        all_deps.update(deps)
-    leaf_steps = [name for name in dag.keys() if name not in all_deps]
-
-    # Input schema: params of root steps, namespaced by step name
-    input_json_schema: Dict[str, Any] = {}
-    for name in root_steps:
-        if name in step_registry:
-            input_json_schema[name] = step_registry[name].step_data.params_json_schema
-
-    # Output schema: returns of leaf steps, namespaced by step name
-    output_json_schema: Dict[str, Any] = {}
-    for name in leaf_steps:
-        if name in step_registry:
-            output_json_schema[name] = step_registry[name].step_data.return_json_schema
-
-    return PipelineData(
-        name=pipeline.name,
-        rid=pipeline.rid,
-        description=pipeline.description,
-        module_path=module_path,
-        steps=module_steps,
-        dag=dag,
-        root_steps=root_steps,
-        leaf_steps=leaf_steps,
-        input_json_schema=input_json_schema,
-        output_json_schema=output_json_schema,
-    )
 
 
 def cmd_check(args):
@@ -346,19 +289,16 @@ def cmd_config_get_dsl(args):
 
     # Build DSL dictionary with steps
     steps_dict = {
-        step_name: step.step_data.model_dump() for (step_name, step) in steps.items()
+        step_name: sf.step_data.model_dump() for (step_name, sf) in steps.items()
     }
 
-    # Build DSL dictionary with pipelines
-    pipelines_dict = {}
-    for pipeline_name, (pipeline, module_path, module_steps) in pipelines.items():
-        pipeline_data = compute_pipeline_data(
-            pipeline=pipeline,
-            module_path=module_path,
-            module_steps=module_steps,
-            step_registry=steps,
-        )
-        pipelines_dict[pipeline_name] = pipeline_data.model_dump()
+    # Build DSL dictionary with pipelines (metadata only)
+    pipelines_dict = {
+        pname: PipelineData(
+            name=p.name, rid=p.rid, description=p.description,
+        ).model_dump()
+        for pname, p in pipelines.items()
+    }
 
     # Combined output with both steps and pipelines
     dsl_dict: Dict[str, Any] = {

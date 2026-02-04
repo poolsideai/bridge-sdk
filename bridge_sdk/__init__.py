@@ -1,8 +1,11 @@
 from .step import (
     step,
+    get_dsl_output,
+)
+
+from .step_function import (
     StepFunction,
     STEP_REGISTRY,
-    get_dsl_output,
 )
 
 from .annotations import (
