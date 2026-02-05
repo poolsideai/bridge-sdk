@@ -30,7 +30,6 @@ pipeline = Pipeline(
 # Models
 # =============================================================================
 
-
 class HelloWorldResult(BaseModel):
     session_id: str
     res: str
@@ -38,25 +37,6 @@ class HelloWorldResult(BaseModel):
 
 class ContinuationInput(BaseModel):
     prompt: str
-
-
-class Step1Input(BaseModel):
-    param1: str
-    param2: int
-
-
-class Step1Output(BaseModel):
-    result: str
-
-
-class Step2Input(BaseModel):
-    param1: str
-    param2: int
-
-
-class Step2Output(BaseModel):
-    result: str
-
 
 # =============================================================================
 # Steps
@@ -103,21 +83,3 @@ def continuation_agent(
             ),
         )
         return session_id
-
-
-@pipeline.step
-def step_1(input_data: Step1Input) -> Step1Output:
-    """A simple step with no dependencies (root step)."""
-    print(input_data)
-    return Step1Output(result="done")
-
-
-@pipeline.step
-def step2(
-    input_data: Annotated[Step1Output, step_result(step_1)],
-    some_other_param: Step2Input,
-) -> Step2Output:
-    """A step that depends on step_1 via step_result annotation."""
-    print(input_data)
-    print(some_other_param)
-    return Step2Output(result="done")
