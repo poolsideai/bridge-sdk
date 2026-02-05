@@ -19,7 +19,7 @@ import argparse
 import asyncio
 import importlib
 import sys
-from typing import Dict, Any
+from typing import Dict, Any, Tuple
 import json
 from pathlib import Path
 
@@ -28,7 +28,8 @@ try:
 except ImportError:
     import tomli as tomllib  # type: ignore[import-not-found,no-redef]
 
-from bridge_sdk import STEP_REGISTRY, StepFunction
+from bridge_sdk.step_function import STEP_REGISTRY, StepFunction
+from bridge_sdk.pipeline import PIPELINE_REGISTRY, Pipeline, PipelineData
 
 
 def load_config_modules() -> list[str]:
@@ -57,7 +58,9 @@ def load_config_modules() -> list[str]:
         modules = bridge_config.get("modules", [])
 
         if not isinstance(modules, list):
-            print(f"Warning: [tool.bridge.modules] should be a list, got {type(modules).__name__}")
+            print(
+                f"Warning: [tool.bridge.modules] should be a list, got {type(modules).__name__}"
+            )
             return []
 
         return modules
@@ -76,19 +79,19 @@ def get_modules_from_args(args) -> list[str]:
     return modules
 
 
-def discover_steps(module_paths: list[str]) -> Dict[str, StepFunction]:
-    """Dynamically discover all functions decorated with @step in the specified modules.
+def discover_steps_and_pipelines(
+    module_paths: list[str],
+) -> Tuple[Dict[str, StepFunction], Dict[str, Pipeline]]:
+    """Discover steps and pipelines from the specified modules.
+
+    Imports each module (which triggers @step and @pipeline.step decorators
+    to populate the global registries), then returns both registries.
 
     Args:
-        module_paths: List of module paths to import and discover steps from.
-                      These must be importable Python modules (i.e., installed packages
-                      or modules accessible via PYTHONPATH).
+        module_paths: List of importable Python module paths.
 
-    Note:
-        For modules to be importable, either:
-        1. Install your project in editable mode: `pip install -e .` or `uv sync`
-        2. Add your project to PYTHONPATH: `export PYTHONPATH="${PYTHONPATH}:$(pwd)"`
-        3. Use fully qualified module paths from installed packages
+    Returns:
+        A tuple of (steps_dict, pipelines_dict).
     """
     for module_path in module_paths:
         try:
@@ -98,10 +101,10 @@ def discover_steps(module_paths: list[str]) -> Dict[str, StepFunction]:
             print()
             print("Make sure your step modules are importable. Options:")
             print("  1. Install your project: pip install -e . (or uv sync)")
-            print("  2. Set PYTHONPATH: export PYTHONPATH=\"${PYTHONPATH}:$(pwd)\"")
+            print('  2. Set PYTHONPATH: export PYTHONPATH="${PYTHONPATH}:$(pwd)"')
             print("  3. Use --modules with fully qualified package paths")
             sys.exit(1)
-    return STEP_REGISTRY
+    return STEP_REGISTRY, PIPELINE_REGISTRY
 
 
 def cmd_check(args):
@@ -139,7 +142,7 @@ def cmd_check(args):
             if not bridge_config:
                 errors.append(
                     "[tool.bridge] section missing from pyproject.toml. "
-                    "Add it with: [tool.bridge]\\nmodules = [\"your_package.steps\"]"
+                    'Add it with: [tool.bridge]\\nmodules = ["your_package.steps"]'
                 )
                 print("[FAIL] [tool.bridge] section configured")
             else:
@@ -150,7 +153,7 @@ def cmd_check(args):
                 if not modules:
                     errors.append(
                         "[tool.bridge.modules] is empty. "
-                        "Add your step modules: modules = [\"your_package.steps\"]"
+                        'Add your step modules: modules = ["your_package.steps"]'
                     )
                     print("[FAIL] [tool.bridge.modules] configured")
                 elif not isinstance(modules, list):
@@ -219,12 +222,27 @@ def cmd_config_get_dsl(args):
             "Error: No modules specified. Use --modules or configure [tool.bridge] in pyproject.toml"
         )
         sys.exit(1)
-    discover_steps(modules)
+
+    # Discover both steps and pipelines
+    steps, pipelines = discover_steps_and_pipelines(modules)
 
     # Build DSL dictionary with steps
-    dsl_dict = {
-        step_name: step.step_data.model_dump()
-        for (step_name, step) in STEP_REGISTRY.items()
+    steps_dict = {
+        step_name: sf.step_data.model_dump() for (step_name, sf) in steps.items()
+    }
+
+    # Build DSL dictionary with pipelines (metadata only)
+    pipelines_dict = {
+        pname: PipelineData(
+            name=p.name, rid=p.rid, description=p.description,
+        ).model_dump()
+        for pname, p in pipelines.items()
+    }
+
+    # Combined output with both steps and pipelines
+    dsl_dict: Dict[str, Any] = {
+        "steps": steps_dict,
+        "pipelines": pipelines_dict,
     }
 
     dsl_json = json.dumps(dsl_dict, indent=2)
@@ -246,7 +264,7 @@ async def cmd_run_step(args):
             "Error: No modules specified. Use --modules or configure [tool.bridge] in pyproject.toml"
         )
         sys.exit(1)
-    steps = discover_steps(modules)
+    steps, _ = discover_steps_and_pipelines(modules)
     step_name = args.step
 
     # 2. Find the step by name
@@ -278,11 +296,32 @@ async def cmd_run_step(args):
     # 3. Get the step function
     step = steps[step_name]
 
-    # Verify dependencies are available
-    dependencies = step.step_data.depends_on or []
-    missing_deps = [dep for dep in dependencies if dep not in cached_results]
-    if missing_deps:
-        raise ValueError(f"Missing cached results for: {', '.join(missing_deps)}")
+    # === Step 1: Resolution ===
+    # Combine --input and --results into the final resolved input
+    # Priority: --input values take precedence over --results
+    try:
+        input_data = json.loads(args.input) if args.input else {}
+    except json.JSONDecodeError as e:
+        print(f"Error parsing input JSON: {e}")
+        sys.exit(1)
+
+    resolved_input = dict(input_data)  # Start with explicit input
+
+    # Fill in params from step results (same logic as on_invoke_step)
+    for param_name, dep_step_name in step.step_data.params_from_step_results.items():
+        # Only fill from results if not already provided in input
+        if param_name not in resolved_input and dep_step_name in cached_results:
+            resolved_input[param_name] = cached_results[dep_step_name]
+
+    # === Step 2: Validation ===
+    # Check that all required params are present in resolved input
+    missing_params = []
+    for param_name, dep_step_name in step.step_data.params_from_step_results.items():
+        if param_name not in resolved_input:
+            missing_params.append(f"{param_name} (from step: {dep_step_name})")
+
+    if missing_params:
+        raise ValueError(f"Missing required parameters: {', '.join(missing_params)}")
 
     # 5. Call the step function
     try:

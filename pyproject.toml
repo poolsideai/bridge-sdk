@@ -28,6 +28,7 @@ packages = ["bridge_sdk"]
 [dependency-groups]
 dev = [
     "licensecheck>=2025.1.0",
+    "pre-commit>=4.0.0",
     "pytest>=7.0.0",
- "pytest-asyncio>=0.21.0",
+    "pytest-asyncio>=0.21.0",
 ]

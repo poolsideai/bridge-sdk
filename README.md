@@ -31,14 +31,19 @@ my_project/
     └── steps.py
 ```
 
-### 3. Define your steps
+### 3. Define a pipeline with steps
 
 Create `my_project/steps.py`:
 
 ```python
 from typing import Annotated
 from pydantic import BaseModel
-from bridge_sdk import step, step_result
+from bridge_sdk import Pipeline, step_result
+
+pipeline = Pipeline(
+    name="my_pipeline",
+    description="Process and transform data",
+)
 
 class ProcessInput(BaseModel):
     value: str
@@ -46,17 +51,19 @@ class ProcessInput(BaseModel):
 class ProcessOutput(BaseModel):
     result: str
 
-@step
+@pipeline.step
 def process_data(input_data: ProcessInput) -> ProcessOutput:
     return ProcessOutput(result=f"processed: {input_data.value}")
 
-@step
+@pipeline.step
 def transform_data(
     input_data: ProcessInput,
     previous: Annotated[ProcessOutput, step_result(process_data)],
 ) -> ProcessOutput:
     return ProcessOutput(result=f"{previous.result} -> {input_data.value}")
 ```
+
+Steps are grouped under a pipeline using the `@pipeline.step` decorator. Dependencies between steps are declared with `step_result` annotations — the DAG is inferred automatically.
 
 ### 4. Configure Bridge SDK
 
@@ -162,39 +169,72 @@ This keeps your `tool.bridge` config short, but you must remember to update `__i
 - `--results-file` - Path to results JSON file
 - `--output-file` - Write result to file
 
-## Defining Steps
+## Defining Steps with Pipelines (Recommended)
 
-### Basic Step
+Pipelines are the recommended way to organize steps. A pipeline groups related steps together, and the dependency graph (DAG) between steps is automatically inferred from `step_result` annotations.
+
+### Basic Pipeline
 
 ```python
-from bridge_sdk import step
+from bridge_sdk import Pipeline
 
-@step
+pipeline = Pipeline(
+    name="my_pipeline",
+    description="My data processing pipeline",
+)
+
+@pipeline.step
 def my_step(value: str) -> str:
     return f"result: {value}"
 ```
 
-### Step with Dependencies
+### Steps with Dependencies
 
-Use `step_result` to declare dependencies:
+Use `step_result` to declare that a step depends on the output of another step:
 
 ```python
 from typing import Annotated
-from bridge_sdk import step, step_result
+from pydantic import BaseModel
+from bridge_sdk import Pipeline, step_result
 
-@step
-def step_a() -> str:
-    return "from step A"
+pipeline = Pipeline(name="data_pipeline")
 
-@step
-def step_b(dep: Annotated[str, step_result(step_a)]) -> str:
-    return f"received: {dep}"
+class RawData(BaseModel):
+    content: str
+
+class CleanedData(BaseModel):
+    content: str
+    word_count: int
+
+class Summary(BaseModel):
+    text: str
+
+@pipeline.step
+def fetch_data() -> RawData:
+    return RawData(content="raw content from source")
+
+@pipeline.step
+def clean_data(
+    raw: Annotated[RawData, step_result(fetch_data)],
+) -> CleanedData:
+    cleaned = raw.content.strip().lower()
+    return CleanedData(content=cleaned, word_count=len(cleaned.split()))
+
+@pipeline.step
+def summarize(
+    data: Annotated[CleanedData, step_result(clean_data)],
+) -> Summary:
+    return Summary(text=f"Processed {data.word_count} words")
 ```
+
+This defines a three-step DAG: `fetch_data → clean_data → summarize`. No explicit wiring is needed — the graph is derived from the `step_result` annotations.
 
 ### Step Decorator Options
 
+`@pipeline.step` accepts the same options as the standalone `@step` decorator:
+
 ```python
-@step(
+@pipeline.step(
     name="custom_name",                    # Override function name
     description="Does something useful",
     setup_script="setup.sh",
@@ -211,7 +251,7 @@ def my_step() -> str:
 Use `credential_bindings` to inject credentials from Bridge into your step's environment. The dictionary key is the **credential UUID** registered in Bridge, and the value is the **environment variable name** the credential will be exposed as at runtime.
 
 ```python
-@step(
+@pipeline.step(
     credential_bindings={
         "a1b2c3d4-5678-90ab-cdef-1234567890ab": "MY_API_KEY",
         "f0e1d2c3-b4a5-6789-0abc-def123456789": "DB_PASSWORD",
@@ -226,9 +266,21 @@ def my_step() -> str:
 ### Async Steps
 
 ```python
-@step
+@pipeline.step
 async def async_step(value: str) -> str:
     return f"async result: {value}"
+```
+
+### Standalone Steps (Deprecated)
+
+> **Deprecated:** Standalone `@step` is deprecated and will be removed in a future release. Use `@pipeline.step` instead.
+
+```python
+from bridge_sdk import step
+
+@step
+def my_step(value: str) -> str:
+    return f"result: {value}"
 ```
 
 ## Calling Agents
@@ -305,12 +357,15 @@ with BridgeSidecarClient() as client:
 
 ```python
 from bridge_sdk import (
-    step,           # Decorator for defining steps
-    step_result,    # Annotation helper for step dependencies
-    StepFunction,   # Type for decorated step functions
-    StepData,       # Pydantic model for step metadata
-    STEP_REGISTRY,  # Global registry of discovered steps
-    get_dsl_output, # Generate DSL from registry
+    Pipeline,          # Pipeline class for grouping steps
+    PipelineData,      # Pydantic model for pipeline metadata
+    PIPELINE_REGISTRY, # Global registry of discovered pipelines
+    step,              # Standalone step decorator (deprecated)
+    step_result,       # Annotation helper for step dependencies
+    StepFunction,      # Type for decorated step functions
+    StepData,          # Pydantic model for step metadata
+    STEP_REGISTRY,     # Global registry of discovered steps
+    get_dsl_output,    # Generate DSL from registry
 )
 
 from bridge_sdk.bridge_sidecar_client import BridgeSidecarClient
@@ -324,6 +379,26 @@ make venv   # Create virtual environment
 make sync   # Install dependencies
 make proto  # Generate protocol buffers
 make test   # Run tests
+```
+
+### Pre-commit Hooks
+
+This project uses pre-commit hooks to automatically update `uv.lock` when `pyproject.toml` changes.
+
+**Setup:**
+```bash
+uv sync
+uv run pre-commit install
+```
+
+**What it does:**
+- Automatically runs `uv lock` when you commit changes to `pyproject.toml`
+- Ensures `uv.lock` is always in sync with dependencies
+- Adds the updated `uv.lock` to your commit automatically
+
+**Manual run:**
+```bash
+uv run pre-commit run --all-files
 ```
 
 ## License

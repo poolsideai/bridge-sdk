@@ -27,7 +27,12 @@ from bridge_sdk.utils import get_relative_path
 class StepData(BaseModel):
     name: str
     """The name of the step."""
-    description: Optional[str]
+    pipeline: Optional[str] = None
+    """The name of the pipeline this step belongs to, if any."""
+    rid: Optional[str] = None
+    """Optional stable resource identifier (UUID). If provided, the backend will use this rid
+    instead of generating a new one. This enables renaming steps while preserving identity."""
+    description: Optional[str] = None
     """The description of the step."""
     setup_script: Optional[str] = None
     """The script to run before the step execution."""
@@ -57,14 +62,35 @@ def create_step_data(
     func: Callable[..., Any],
     function_schema: FunctionSchema,
     name: str | None = None,
+    rid: str | None = None,
     description: str | None = None,
     setup_script: str | None = None,
     post_execution_script: str | None = None,
     metadata: dict[str, Any] | None = None,
     sandbox_id: str | None = None,
     credential_bindings: dict[str, str] | None = None,
+    pipeline_name: str | None = None,
 ) -> StepData:
-    """Create a StepData object from a step function."""
+    """Create a StepData object from a step function.
+
+    Args:
+        func: The step function.
+        function_schema: The function's schema.
+        name: Optional override name for the step.
+        rid: Optional stable resource identifier (UUID). If provided, the backend
+            will use this rid instead of generating a new one. This enables
+            renaming steps while preserving identity.
+        description: Optional description for the step.
+        setup_script: Optional script to run before execution.
+        post_execution_script: Optional script to run after execution.
+        metadata: Optional arbitrary metadata.
+        sandbox_id: Optional execution environment ID.
+        credential_bindings: Optional credential bindings.
+        pipeline_name: Optional pipeline name this step belongs to.
+
+    Returns:
+        A StepData object with all metadata.
+    """
     # Extract file path and line number from the function
     func_file = inspect.getfile(func)
     file_path = get_relative_path(func_file)
@@ -77,8 +103,8 @@ def create_step_data(
 
     params_from_step_results_dict: dict[str, str] = {}
 
-    for param, annotations in function_schema.param_annotations.items():
-        from_step = extract_step_result_annotation(annotations)
+    for param, param_annots in function_schema.param_annotations.items():
+        from_step = extract_step_result_annotation(param_annots)
         if from_step:
             params_from_step_results_dict[param] = from_step
 
@@ -86,6 +112,8 @@ def create_step_data(
 
     return StepData(
         name=name or function_schema.name,
+        pipeline=pipeline_name,
+        rid=rid,
         description=description,
         setup_script=setup_script,
         post_execution_script=post_execution_script,
