@@ -75,7 +75,8 @@ class BridgeSidecarClient:
                 can be a dict like ``{"type": "text", "text": "..."}``,
                 ``{"type": "image_url", "image_url": {"url": "..."}}``,
                 a ``TextContentPart``/``ImageURLContentPart`` model, or a proto
-                ``ContentPart`` message directly.
+                ``ContentPart`` message directly. These parts are sent after
+                the prompt. Use ContentParts only to control the order, e.g. to put an image first.
 
         Returns:
             Tuple of (agent_name, session_id, exit_result)

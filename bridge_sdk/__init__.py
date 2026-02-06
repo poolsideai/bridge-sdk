@@ -34,6 +34,15 @@ from .pipeline import (
     PIPELINE_REGISTRY,
 )
 
+from .models import (
+    ContentPart,
+    ContentPartInput,
+    ImageURLContent,
+    ImageURLContentPart,
+    TextContentPart,
+    to_proto_content_part,
+)
+
 __all__ = [
     "step",
     "StepFunction",
@@ -44,4 +53,10 @@ __all__ = [
     "Pipeline",
     "PipelineData",
     "PIPELINE_REGISTRY",
+    "ContentPart",
+    "ContentPartInput",
+    "ImageURLContent",
+    "ImageURLContentPart",
+    "TextContentPart",
+    "to_proto_content_part",
 ]

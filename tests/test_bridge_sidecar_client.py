@@ -20,14 +20,12 @@ import grpc
 import pytest
 from pydantic import ValidationError
 
-from bridge_sdk.bridge_sidecar_client import (
-    BridgeSidecarClient,
-    to_proto_content_part,
-)
+from bridge_sdk.bridge_sidecar_client import BridgeSidecarClient
 from bridge_sdk.models import (
     ImageURLContent,
     ImageURLContentPart,
     TextContentPart,
+    to_proto_content_part,
 )
 from bridge_sdk.proto import bridge_sidecar_pb2, bridge_sidecar_pb2_grpc
 
