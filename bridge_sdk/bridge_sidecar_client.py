@@ -15,35 +15,10 @@
 """gRPC client for the Bridge service."""
 import grpc
 from typing import Optional
+
+from bridge_sdk.models import ContentPartInput, to_proto_content_part
 from bridge_sdk.proto import bridge_sidecar_pb2, bridge_sidecar_pb2_grpc
 
-
-ContentPartInput = bridge_sidecar_pb2.ContentPart | dict
-
-
-def _to_proto_content_part(part: ContentPartInput) -> bridge_sidecar_pb2.ContentPart:
-    """Convert a dict or proto ContentPart to a proto ContentPart."""
-    if isinstance(part, bridge_sidecar_pb2.ContentPart):
-        return part
-    if not isinstance(part, dict):
-        raise TypeError(f"content_parts items must be dicts or ContentPart messages, got {type(part)}")
-    part_type = part.get("type")
-    if not part_type:
-        raise ValueError("content_parts item must have a 'type' field")
-    kwargs: dict = {"type": part_type}
-    if part_type == "text":
-        text = part.get("text")
-        if not text:
-            raise ValueError("text content part must have a non-empty 'text' field")
-        kwargs["text"] = text
-    elif part_type == "image_url":
-        image_url = part.get("image_url")
-        if not isinstance(image_url, dict) or not image_url.get("url"):
-            raise ValueError("image_url content part must have an 'image_url' dict with a 'url' field")
-        kwargs["image_url"] = bridge_sidecar_pb2.ImageURL(url=image_url["url"])
-    else:
-        raise ValueError(f"unsupported content part type: {part_type}")
-    return bridge_sidecar_pb2.ContentPart(**kwargs)
 
 
 class BridgeSidecarClient:
@@ -97,8 +72,9 @@ class BridgeSidecarClient:
             directory: Working directory for the agent
             continue_from: Optional continuation details from a previous run
             content_parts: Optional multimodal content parts (text, images). Each item
-                can be a dict like ``{"type": "text", "text": "..."}`` or
-                ``{"type": "image_url", "image_url": {"url": "..."}}`` or a proto
+                can be a dict like ``{"type": "text", "text": "..."}``,
+                ``{"type": "image_url", "image_url": {"url": "..."}}``,
+                a ``TextContentPart``/``ImageURLContentPart`` model, or a proto
                 ``ContentPart`` message directly.
 
         Returns:
@@ -110,7 +86,7 @@ class BridgeSidecarClient:
         if agent_name is None:
             agent_name = "agent_1003_cc_v2_rc-fp8-tpr"
 
-        proto_parts = [_to_proto_content_part(p) for p in content_parts] if content_parts else []
+        proto_parts = [to_proto_content_part(p) for p in content_parts] if content_parts else []
 
         request = bridge_sidecar_pb2.StartAgentRequest(
             prompt=prompt,

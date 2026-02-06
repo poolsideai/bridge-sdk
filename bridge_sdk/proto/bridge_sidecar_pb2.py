@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n%bridge_sdk/proto/bridge_sidecar.proto\x12\x0fpoolside.bridge\"3\n\tRunDetail\x12\x12\n\nagent_name\x18\x01 \x01(\t\x12\x12\n\nsession_id\x18\x02 \x01(\t\"\xa0\x02\n\x0c\x43ontinueFrom\x12\x37\n\x13previous_run_detail\x18\x01 \x01(\x0b\x32\x1a.poolside.bridge.RunDetail\x12J\n\x0c\x63ontinuation\x18\x02 \x01(\x0b\x32\x32.poolside.bridge.ContinueFrom.NoCompactionStrategyH\x00\x12\x46\n\ncompaction\x18\x03 \x01(\x0b\x32\x30.poolside.bridge.ContinueFrom.CompactionStrategyH\x00\x1a\x16\n\x14NoCompactionStrategy\x1a\x14\n\x12\x43ompactionStrategyB\x15\n\x13\x63ompaction_strategy\"\xb5\x01\n\x11StartAgentRequest\x12\x0e\n\x06prompt\x18\x01 \x01(\t\x12\x12\n\nagent_name\x18\x02 \x01(\t\x12\x11\n\tdirectory\x18\x03 \x01(\t\x12\x34\n\rcontinue_from\x18\x04 \x01(\x0b\x32\x1d.poolside.bridge.ContinueFrom\x12\x33\n\rcontent_parts\x18\x05 \x03(\x0b\x32\x1c.poolside.bridge.ContentPart\"x\n\x0b\x43ontentPart\x12\x0c\n\x04type\x18\x01 \x01(\t\x12\x11\n\x04text\x18\x02 \x01(\tH\x00\x88\x01\x01\x12\x31\n\timage_url\x18\x03 \x01(\x0b\x32\x19.poolside.bridge.ImageURLH\x01\x88\x01\x01\x42\x07\n\x05_textB\x0c\n\n_image_url\"\x17\n\x08ImageURL\x12\x0b\n\x03url\x18\x01 \x01(\t\"Y\n\x12StartAgentResponse\x12.\n\nrun_detail\x18\x01 \x01(\x0b\x32\x1a.poolside.bridge.RunDetail\x12\x13\n\x0b\x65xit_result\x18\x03 \x01(\t2m\n\x14\x42ridgeSidecarService\x12U\n\nStartAgent\x12\".poolside.bridge.StartAgentRequest\x1a#.poolside.bridge.StartAgentResponseB.Z,github.com/poolsideai/forge/pkg/bridge/protob\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n%bridge_sdk/proto/bridge_sidecar.proto\x12\x0fpoolside.bridge\"3\n\tRunDetail\x12\x12\n\nagent_name\x18\x01 \x01(\t\x12\x12\n\nsession_id\x18\x02 \x01(\t\"\xa0\x02\n\x0c\x43ontinueFrom\x12\x37\n\x13previous_run_detail\x18\x01 \x01(\x0b\x32\x1a.poolside.bridge.RunDetail\x12J\n\x0c\x63ontinuation\x18\x02 \x01(\x0b\x32\x32.poolside.bridge.ContinueFrom.NoCompactionStrategyH\x00\x12\x46\n\ncompaction\x18\x03 \x01(\x0b\x32\x30.poolside.bridge.ContinueFrom.CompactionStrategyH\x00\x1a\x16\n\x14NoCompactionStrategy\x1a\x14\n\x12\x43ompactionStrategyB\x15\n\x13\x63ompaction_strategy\"\xb5\x01\n\x11StartAgentRequest\x12\x0e\n\x06prompt\x18\x01 \x01(\t\x12\x12\n\nagent_name\x18\x02 \x01(\t\x12\x11\n\tdirectory\x18\x03 \x01(\t\x12\x34\n\rcontinue_from\x18\x04 \x01(\x0b\x32\x1d.poolside.bridge.ContinueFrom\x12\x33\n\rcontent_parts\x18\x05 \x03(\x0b\x32\x1c.poolside.bridge.ContentPart\"X\n\x0b\x43ontentPart\x12\x0e\n\x04text\x18\x01 \x01(\tH\x00\x12.\n\timage_url\x18\x02 \x01(\x0b\x32\x19.poolside.bridge.ImageURLH\x00\x42\t\n\x07\x63ontent\"\x17\n\x08ImageURL\x12\x0b\n\x03url\x18\x01 \x01(\t\"Y\n\x12StartAgentResponse\x12.\n\nrun_detail\x18\x01 \x01(\x0b\x32\x1a.poolside.bridge.RunDetail\x12\x13\n\x0b\x65xit_result\x18\x03 \x01(\t2m\n\x14\x42ridgeSidecarService\x12U\n\nStartAgent\x12\".poolside.bridge.StartAgentRequest\x1a#.poolside.bridge.StartAgentResponseB.Z,github.com/poolsideai/forge/pkg/bridge/protob\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -43,11 +43,11 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_STARTAGENTREQUEST']._serialized_start=403
   _globals['_STARTAGENTREQUEST']._serialized_end=584
   _globals['_CONTENTPART']._serialized_start=586
-  _globals['_CONTENTPART']._serialized_end=706
-  _globals['_IMAGEURL']._serialized_start=708
-  _globals['_IMAGEURL']._serialized_end=731
-  _globals['_STARTAGENTRESPONSE']._serialized_start=733
-  _globals['_STARTAGENTRESPONSE']._serialized_end=822
-  _globals['_BRIDGESIDECARSERVICE']._serialized_start=824
-  _globals['_BRIDGESIDECARSERVICE']._serialized_end=933
+  _globals['_CONTENTPART']._serialized_end=674
+  _globals['_IMAGEURL']._serialized_start=676
+  _globals['_IMAGEURL']._serialized_end=699
+  _globals['_STARTAGENTRESPONSE']._serialized_start=701
+  _globals['_STARTAGENTRESPONSE']._serialized_end=790
+  _globals['_BRIDGESIDECARSERVICE']._serialized_start=792
+  _globals['_BRIDGESIDECARSERVICE']._serialized_end=901
 # @@protoc_insertion_point(module_scope)

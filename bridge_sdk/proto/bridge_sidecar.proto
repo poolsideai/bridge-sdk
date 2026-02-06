@@ -48,11 +48,12 @@ message StartAgentRequest {
   repeated ContentPart content_parts = 5;
 }
 
-// ContentPart represents a single piece of multimodal content (text, image, etc.)
+// ContentPart represents a single piece of multimodal content.
 message ContentPart {
-  string type = 1;
-  optional string text = 2;
-  optional ImageURL image_url = 3;
+  oneof content {
+    string text = 1;
+    ImageURL image_url = 2;
+  }
 }
 
 // ImageURL represents an image URL or base64 data URI

@@ -45,14 +45,12 @@ class StartAgentRequest(_message.Message):
     def __init__(self, prompt: _Optional[str] = ..., agent_name: _Optional[str] = ..., directory: _Optional[str] = ..., continue_from: _Optional[_Union[ContinueFrom, _Mapping]] = ..., content_parts: _Optional[_Iterable[_Union[ContentPart, _Mapping]]] = ...) -> None: ...
 
 class ContentPart(_message.Message):
-    __slots__ = ("type", "text", "image_url")
-    TYPE_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ("text", "image_url")
     TEXT_FIELD_NUMBER: _ClassVar[int]
     IMAGE_URL_FIELD_NUMBER: _ClassVar[int]
-    type: str
     text: str
     image_url: ImageURL
-    def __init__(self, type: _Optional[str] = ..., text: _Optional[str] = ..., image_url: _Optional[_Union[ImageURL, _Mapping]] = ...) -> None: ...
+    def __init__(self, text: _Optional[str] = ..., image_url: _Optional[_Union[ImageURL, _Mapping]] = ...) -> None: ...
 
 class ImageURL(_message.Message):
     __slots__ = ("url",)

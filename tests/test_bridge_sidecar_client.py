@@ -15,14 +15,19 @@
 """Tests for bridge_sidecar_client content_parts support."""
 
 from concurrent import futures
-from unittest.mock import MagicMock
 
 import grpc
 import pytest
+from pydantic import ValidationError
 
 from bridge_sdk.bridge_sidecar_client import (
     BridgeSidecarClient,
     _to_proto_content_part,
+)
+from bridge_sdk.models import (
+    ImageURLContent,
+    ImageURLContentPart,
+    TextContentPart,
 )
 from bridge_sdk.proto import bridge_sidecar_pb2, bridge_sidecar_pb2_grpc
 
@@ -33,17 +38,16 @@ from bridge_sdk.proto import bridge_sidecar_pb2, bridge_sidecar_pb2_grpc
 
 
 class TestToProtoContentPart:
-    def test_text_part_from_dict(self):
+    def test_text_from_dict(self):
         part = _to_proto_content_part({"type": "text", "text": "hello"})
-        assert part.type == "text"
+        assert part.WhichOneof("content") == "text"
         assert part.text == "hello"
-        assert not part.HasField("image_url")
 
-    def test_image_url_part_from_dict(self):
+    def test_image_url_from_dict(self):
         part = _to_proto_content_part(
             {"type": "image_url", "image_url": {"url": "https://example.com/img.png"}}
         )
-        assert part.type == "image_url"
+        assert part.WhichOneof("content") == "image_url"
         assert part.image_url.url == "https://example.com/img.png"
 
     def test_image_url_data_uri(self):
@@ -53,45 +57,52 @@ class TestToProtoContentPart:
         )
         assert part.image_url.url == data_uri
 
+    def test_text_from_pydantic_model(self):
+        part = _to_proto_content_part(TextContentPart(type="text", text="from model"))
+        assert part.WhichOneof("content") == "text"
+        assert part.text == "from model"
+
+    def test_image_url_from_pydantic_model(self):
+        part = _to_proto_content_part(
+            ImageURLContentPart(
+                type="image_url",
+                image_url=ImageURLContent(url="https://example.com/pic.jpg"),
+            )
+        )
+        assert part.WhichOneof("content") == "image_url"
+        assert part.image_url.url == "https://example.com/pic.jpg"
+
     def test_passthrough_proto_object(self):
-        proto = bridge_sidecar_pb2.ContentPart(type="text", text="already proto")
+        proto = bridge_sidecar_pb2.ContentPart(text="already proto")
         result = _to_proto_content_part(proto)
         assert result is proto
 
     def test_missing_type_raises(self):
-        with pytest.raises(ValueError, match="must have a 'type' field"):
+        with pytest.raises(ValidationError):
             _to_proto_content_part({"text": "no type"})
 
-    def test_empty_type_raises(self):
-        with pytest.raises(ValueError, match="must have a 'type' field"):
-            _to_proto_content_part({"type": "", "text": "empty type"})
-
     def test_unsupported_type_raises(self):
-        with pytest.raises(ValueError, match="unsupported content part type: audio"):
+        with pytest.raises(ValidationError):
             _to_proto_content_part({"type": "audio", "data": "..."})
 
     def test_text_missing_text_raises(self):
-        with pytest.raises(ValueError, match="non-empty 'text' field"):
+        with pytest.raises(ValidationError):
             _to_proto_content_part({"type": "text"})
 
     def test_text_empty_text_raises(self):
-        with pytest.raises(ValueError, match="non-empty 'text' field"):
+        with pytest.raises(ValidationError):
             _to_proto_content_part({"type": "text", "text": ""})
 
     def test_image_url_missing_image_url_raises(self):
-        with pytest.raises(ValueError, match="'image_url' dict with a 'url' field"):
+        with pytest.raises(ValidationError):
             _to_proto_content_part({"type": "image_url"})
 
     def test_image_url_empty_url_raises(self):
-        with pytest.raises(ValueError, match="'image_url' dict with a 'url' field"):
+        with pytest.raises(ValidationError):
             _to_proto_content_part({"type": "image_url", "image_url": {"url": ""}})
 
-    def test_image_url_not_dict_raises(self):
-        with pytest.raises(ValueError, match="'image_url' dict with a 'url' field"):
-            _to_proto_content_part({"type": "image_url", "image_url": "not a dict"})
-
     def test_non_dict_non_proto_raises(self):
-        with pytest.raises(TypeError, match="must be dicts or ContentPart messages"):
+        with pytest.raises(ValidationError):
             _to_proto_content_part("not a dict")  # type: ignore
 
 
@@ -150,9 +161,9 @@ class TestStartAgentContentParts:
         req = servicer.last_request
         assert req is not None
         assert len(req.content_parts) == 2
-        assert req.content_parts[0].type == "text"
+        assert req.content_parts[0].WhichOneof("content") == "text"
         assert req.content_parts[0].text == "What is in this image?"
-        assert req.content_parts[1].type == "image_url"
+        assert req.content_parts[1].WhichOneof("content") == "image_url"
         assert req.content_parts[1].image_url.url == "https://example.com/img.png"
 
     def test_with_proto_content_parts(self, sidecar_server):
@@ -162,7 +173,7 @@ class TestStartAgentContentParts:
                 prompt="analyze",
                 agent_name="test-agent",
                 content_parts=[
-                    bridge_sidecar_pb2.ContentPart(type="text", text="raw proto"),
+                    bridge_sidecar_pb2.ContentPart(text="raw proto"),
                 ],
             )
 
