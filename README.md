@@ -330,6 +330,37 @@ def run_agent() -> dict:
     return {"session_id": session_id, "response": response}
 ```
 
+### Multimodal content parts
+
+Use `content_parts` to send text and image inputs alongside the prompt. Example file: `examples/multimodal_agent_example.py`.
+
+```python
+from bridge_sdk import Pipeline
+from bridge_sdk.bridge_sidecar_client import BridgeSidecarClient
+
+pipeline = Pipeline(name="multimodal_agent_example")
+
+@pipeline.step(metadata={"type": "agent"})
+def analyze_image() -> tuple[str, str]:
+    content_parts = [
+        {"type": "text", "text": "Describe the image and list notable objects."},
+        {
+            "type": "image_url",
+            "image_url": {
+                "url": "https://upload.wikimedia.org/wikipedia/commons/7/70/Example.png"
+            },
+        },
+    ]
+
+    with BridgeSidecarClient() as client:
+        _, session_id, res = client.start_agent(
+            prompt="Analyze the attached image.",
+            agent_name="Malibu",
+            content_parts=content_parts,
+        )
+        return session_id, res
+```
+
 ### Continuing from a Previous Session
 
 To continue an agent session (preserving context from a previous step):

@@ -15,7 +15,10 @@
 """gRPC client for the Bridge service."""
 import grpc
 from typing import Optional
+
+from bridge_sdk.models import ContentPartInput, to_proto_content_part
 from bridge_sdk.proto import bridge_sidecar_pb2, bridge_sidecar_pb2_grpc
+
 
 
 class BridgeSidecarClient:
@@ -58,6 +61,7 @@ class BridgeSidecarClient:
         agent_name: Optional[str] = None,
         directory: Optional[str] = None,
         continue_from: Optional[bridge_sidecar_pb2.ContinueFrom] = None,
+        content_parts: Optional[list[ContentPartInput]] = None,
     ) -> tuple[str, str, str]:
         """
         Start an agent with the given prompt.
@@ -67,6 +71,12 @@ class BridgeSidecarClient:
             agent_name: Name of the agent to use (defaults to "agent_1003_cc_v2_rc-fp8-tpr")
             directory: Working directory for the agent
             continue_from: Optional continuation details from a previous run
+            content_parts: Optional multimodal content parts (text, images). Each item
+                can be a dict like ``{"type": "text", "text": "..."}``,
+                ``{"type": "image_url", "image_url": {"url": "..."}}``,
+                a ``TextContentPart``/``ImageURLContentPart`` model, or a proto
+                ``ContentPart`` message directly. These parts are sent after
+                the prompt. Use ContentParts only to control the order, e.g. to put an image first.
 
         Returns:
             Tuple of (agent_name, session_id, exit_result)
@@ -77,11 +87,14 @@ class BridgeSidecarClient:
         if agent_name is None:
             agent_name = "agent_1003_cc_v2_rc-fp8-tpr"
 
+        proto_parts = [to_proto_content_part(p) for p in content_parts] if content_parts else []
+
         request = bridge_sidecar_pb2.StartAgentRequest(
             prompt=prompt,
             agent_name=agent_name,
             directory=directory or "",
             continue_from=continue_from,
+            content_parts=proto_parts,
         )
         response = self.stub.StartAgent(request)
 
