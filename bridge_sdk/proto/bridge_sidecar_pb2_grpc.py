@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from bridge_sdk.proto import bridge_sidecar_pb2 as bridge__sdk_dot_proto_dot_bridge__sidecar__pb2
+from bridge_sdk.proto import bridge_sidecar_pb2
 
 GRPC_GENERATED_VERSION = '1.76.0'
 GRPC_VERSION = grpc.__version__
@@ -37,8 +37,8 @@ class BridgeSidecarServiceStub(object):
         """
         self.StartAgent = channel.unary_unary(
                 '/poolside.bridge.BridgeSidecarService/StartAgent',
-                request_serializer=bridge__sdk_dot_proto_dot_bridge__sidecar__pb2.StartAgentRequest.SerializeToString,
-                response_deserializer=bridge__sdk_dot_proto_dot_bridge__sidecar__pb2.StartAgentResponse.FromString,
+                request_serializer=bridge_sidecar_pb2.StartAgentRequest.SerializeToString,
+                response_deserializer=bridge_sidecar_pb2.StartAgentResponse.FromString,
                 _registered_method=True)
 
 
@@ -58,8 +58,8 @@ def add_BridgeSidecarServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'StartAgent': grpc.unary_unary_rpc_method_handler(
                     servicer.StartAgent,
-                    request_deserializer=bridge__sdk_dot_proto_dot_bridge__sidecar__pb2.StartAgentRequest.FromString,
-                    response_serializer=bridge__sdk_dot_proto_dot_bridge__sidecar__pb2.StartAgentResponse.SerializeToString,
+                    request_deserializer=bridge_sidecar_pb2.StartAgentRequest.FromString,
+                    response_serializer=bridge_sidecar_pb2.StartAgentResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -88,8 +88,8 @@ class BridgeSidecarService(object):
             request,
             target,
             '/poolside.bridge.BridgeSidecarService/StartAgent',
-            bridge__sdk_dot_proto_dot_bridge__sidecar__pb2.StartAgentRequest.SerializeToString,
-            bridge__sdk_dot_proto_dot_bridge__sidecar__pb2.StartAgentResponse.FromString,
+            bridge_sidecar_pb2.StartAgentRequest.SerializeToString,
+            bridge_sidecar_pb2.StartAgentResponse.FromString,
             options,
             channel_credentials,
             insecure,
