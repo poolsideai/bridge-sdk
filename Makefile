@@ -11,7 +11,7 @@ sync:
 proto:
 	python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. --pyi_out=. bridge_sdk/proto/bridge_sidecar.proto
 	# Fix import path in generated gRPC file
-	sed -i '' 's/import bridge_sidecar_pb2/from bridge_sdk.proto import bridge_sidecar_pb2/' bridge_sdk/proto/bridge_sidecar_pb2_grpc.py
+	sed -i '' 's/^import bridge_sidecar_pb2/from bridge_sdk.proto import bridge_sidecar_pb2/' bridge_sdk/proto/bridge_sidecar_pb2_grpc.py
 
 test:
 	uv run pytest tests/ -v

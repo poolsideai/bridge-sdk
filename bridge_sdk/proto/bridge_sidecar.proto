@@ -45,6 +45,19 @@ message StartAgentRequest {
   string agent_name = 2;
   string directory = 3;
   ContinueFrom continue_from = 4;
+  repeated ContentPart content_parts = 5;
+}
+
+// ContentPart represents a single piece of multimodal content (text, image, etc.)
+message ContentPart {
+  string type = 1;
+  optional string text = 2;
+  optional ImageURL image_url = 3;
+}
+
+// ImageURL represents an image URL or base64 data URI
+message ImageURL {
+  string url = 1;
 }
 
 message StartAgentResponse {
