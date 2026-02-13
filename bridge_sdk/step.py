@@ -20,6 +20,7 @@ from typing import (
 )
 from typing_extensions import ParamSpec, TypeVar
 
+from bridge_sdk.models import SandboxDefinition
 from bridge_sdk.step_function import StepFunction, STEP_REGISTRY, make_step_function
 
 P = ParamSpec("P")
@@ -38,6 +39,7 @@ def step(
     metadata: dict[str, Any] | None = None,
     sandbox_id: str | None = None,
     credential_bindings: dict[str, str] | None = None,
+    sandbox_definition: SandboxDefinition | None = None,
 ) -> StepFunction[P, R]:
     """Overload for usage as @step (no parentheses)."""
     ...
@@ -54,6 +56,7 @@ def step(
     metadata: dict[str, Any] | None = None,
     sandbox_id: str | None = None,
     credential_bindings: dict[str, str] | None = None,
+    sandbox_definition: SandboxDefinition | None = None,
 ) -> Callable[[Callable[P, R]], StepFunction[P, R]]:
     """Overload for usage as @step(...)"""
     ...
@@ -70,6 +73,7 @@ def step(
     metadata: dict[str, Any] | None = None,
     sandbox_id: str | None = None,
     credential_bindings: dict[str, str] | None = None,
+    sandbox_definition: SandboxDefinition | None = None,
 ) -> StepFunction[P, R] | Callable[[Callable[P, R]], StepFunction[P, R]]:
     """Decorator for configuring a Step with execution metadata.
 
@@ -83,8 +87,10 @@ def step(
         setup_script: Optional script to run before step execution.
         post_execution_script: Optional script to run after step execution.
         metadata: Optional arbitrary metadata dict.
-        sandbox_id: Optional execution environment ID.
+        sandbox_id: Optional execution environment ID (references a pre-existing sandbox).
         credential_bindings: Optional credential name to ID mappings.
+        sandbox_definition: Optional inline sandbox definition specifying Docker image
+            and resource requirements for this step's execution environment.
 
     Returns:
         A StepFunction wrapper with step_data and on_invoke_step attributes.
@@ -101,6 +107,7 @@ def step(
             metadata=metadata,
             sandbox_id=sandbox_id,
             credential_bindings=credential_bindings,
+            sandbox_definition=sandbox_definition,
         )
 
     # If func is actually a callable, we were used as @step with no parentheses

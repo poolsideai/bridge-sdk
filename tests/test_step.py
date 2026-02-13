@@ -369,5 +369,149 @@ def test_step_rid_with_name_override():
     assert step_data.rid == "custom-rid-456"
 
 
+def test_step_with_sandbox_definition():
+    """Test that @step decorator accepts sandbox_definition parameter and includes it in StepData."""
+    from bridge_sdk import SandboxDefinition
+
+    sandbox_def = SandboxDefinition(
+        image="python:3.11-slim",
+        cpu_request="500m",
+        memory_request="512Mi",
+        memory_limit="1Gi",
+    )
+
+    @step(
+        name="step_with_sandbox",
+        sandbox_definition=sandbox_def,
+    )
+    def my_step() -> str:
+        return "test"
+
+    assert "step_with_sandbox" in STEP_REGISTRY
+    step_data = STEP_REGISTRY["step_with_sandbox"].step_data
+    assert step_data.sandbox_definition is not None
+    assert step_data.sandbox_definition.image == "python:3.11-slim"
+    assert step_data.sandbox_definition.cpu_request == "500m"
+    assert step_data.sandbox_definition.memory_request == "512Mi"
+    assert step_data.sandbox_definition.memory_limit == "1Gi"
+    assert step_data.sandbox_definition.storage_request is None
+    assert step_data.sandbox_definition.storage_limit is None
+
+
+def test_step_data_sandbox_definition_serialization():
+    """Test that SandboxDefinition is correctly serialized in model_dump(exclude_none=True) output."""
+    import json
+    from bridge_sdk import SandboxDefinition
+
+    sandbox_def = SandboxDefinition(
+        image="pytorch/pytorch:2.0.0-cuda11.7-cudnn8-runtime",
+        cpu_request="2",
+        memory_request="4Gi",
+        memory_limit="8Gi",
+        storage_request="50Gi",
+    )
+
+    @step(
+        name="step_for_serialization",
+        sandbox_definition=sandbox_def,
+    )
+    def serialize_step() -> str:
+        return "test"
+
+    step_data = STEP_REGISTRY["step_for_serialization"].step_data
+    dumped = step_data.model_dump(exclude_none=True)
+
+    # Verify sandbox_definition is in the serialized output
+    assert "sandbox_definition" in dumped
+    assert dumped["sandbox_definition"]["image"] == "pytorch/pytorch:2.0.0-cuda11.7-cudnn8-runtime"
+    assert dumped["sandbox_definition"]["cpu_request"] == "2"
+    assert dumped["sandbox_definition"]["memory_request"] == "4Gi"
+    assert dumped["sandbox_definition"]["memory_limit"] == "8Gi"
+    assert dumped["sandbox_definition"]["storage_request"] == "50Gi"
+    # storage_limit is None so should be excluded
+    assert "storage_limit" not in dumped["sandbox_definition"]
+
+    # Verify JSON serializable
+    json_str = json.dumps(dumped)
+    parsed = json.loads(json_str)
+    assert parsed["sandbox_definition"]["image"] == "pytorch/pytorch:2.0.0-cuda11.7-cudnn8-runtime"
+
+
+def test_step_without_sandbox_definition():
+    """Test that step without sandbox_definition has None value and is excluded from serialization."""
+
+    @step(name="step_no_sandbox_def")
+    def no_sandbox_step() -> str:
+        return "test"
+
+    step_data = STEP_REGISTRY["step_no_sandbox_def"].step_data
+    assert step_data.sandbox_definition is None
+
+    # When using exclude_none=True, sandbox_definition should not appear
+    dumped = step_data.model_dump(exclude_none=True)
+    assert "sandbox_definition" not in dumped
+
+
+def test_sandbox_definition_validation():
+    """Test that SandboxDefinition validates required image field."""
+    import pytest as pt
+    from pydantic import ValidationError
+    from bridge_sdk import SandboxDefinition
+
+    # Valid: image is provided
+    valid_sandbox = SandboxDefinition(image="ubuntu:22.04")
+    assert valid_sandbox.image == "ubuntu:22.04"
+
+    # Valid: with optional fields
+    full_sandbox = SandboxDefinition(
+        image="python:3.11",
+        cpu_request="1",
+        memory_request="1Gi",
+        memory_limit="2Gi",
+        storage_request="10Gi",
+        storage_limit="20Gi",
+    )
+    assert full_sandbox.cpu_request == "1"
+    assert full_sandbox.storage_limit == "20Gi"
+
+    # Invalid: empty image string
+    with pt.raises(ValidationError):
+        SandboxDefinition(image="")
+
+    # Invalid: missing required image field
+    with pt.raises(ValidationError):
+        SandboxDefinition()  # type: ignore[call-arg]
+
+
+def test_sandbox_definition_in_dsl_output():
+    """Test that sandbox_definition appears in get_dsl_output()."""
+    import json
+    from bridge_sdk import SandboxDefinition, get_dsl_output
+
+    sandbox_def = SandboxDefinition(
+        image="custom-image:latest",
+        memory_limit="4Gi",
+    )
+
+    @step(
+        name="dsl_sandbox_step",
+        sandbox_definition=sandbox_def,
+    )
+    def dsl_sandbox_func() -> str:
+        return "test"
+
+    dsl_output = get_dsl_output()
+    assert "dsl_sandbox_step" in dsl_output
+
+    step_output = dsl_output["dsl_sandbox_step"]
+    assert "sandbox_definition" in step_output
+    assert step_output["sandbox_definition"]["image"] == "custom-image:latest"
+    assert step_output["sandbox_definition"]["memory_limit"] == "4Gi"
+
+    # Verify entire output is JSON serializable
+    json_str = json.dumps(dsl_output)
+    assert "custom-image:latest" in json_str
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

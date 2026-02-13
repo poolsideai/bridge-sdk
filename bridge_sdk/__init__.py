@@ -39,6 +39,7 @@ from .models import (
     ContentPartInput,
     ImageURLContent,
     ImageURLContentPart,
+    SandboxDefinition,
     TextContentPart,
     to_proto_content_part,
 )
@@ -57,6 +58,7 @@ __all__ = [
     "ContentPartInput",
     "ImageURLContent",
     "ImageURLContentPart",
+    "SandboxDefinition",
     "TextContentPart",
     "to_proto_content_part",
 ]

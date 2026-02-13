@@ -21,6 +21,7 @@ from typing import Any, Callable, Dict, Optional, overload
 from pydantic import BaseModel
 from typing_extensions import ParamSpec, TypeVar
 
+from bridge_sdk.models import SandboxDefinition
 from bridge_sdk.step_function import StepFunction, make_step_function
 
 P = ParamSpec("P")
@@ -94,6 +95,7 @@ class Pipeline:
         metadata: dict[str, Any] | None = ...,
         sandbox_id: str | None = ...,
         credential_bindings: dict[str, str] | None = ...,
+        sandbox_definition: SandboxDefinition | None = ...,
     ) -> StepFunction[P, R]:
         """Overload for usage as @pipeline.step (no parentheses)."""
         ...
@@ -110,6 +112,7 @@ class Pipeline:
         metadata: dict[str, Any] | None = ...,
         sandbox_id: str | None = ...,
         credential_bindings: dict[str, str] | None = ...,
+        sandbox_definition: SandboxDefinition | None = ...,
     ) -> Callable[[Callable[P, R]], StepFunction[P, R]]:
         """Overload for usage as @pipeline.step(...)"""
         ...
@@ -126,6 +129,7 @@ class Pipeline:
         metadata: dict[str, Any] | None = None,
         sandbox_id: str | None = None,
         credential_bindings: dict[str, str] | None = None,
+        sandbox_definition: SandboxDefinition | None = None,
     ) -> StepFunction[P, R] | Callable[[Callable[P, R]], StepFunction[P, R]]:
         """Decorator for defining a step associated with this pipeline.
 
@@ -144,6 +148,7 @@ class Pipeline:
                 sandbox_id=sandbox_id,
                 credential_bindings=credential_bindings,
                 pipeline_name=self.name,
+                sandbox_definition=sandbox_definition,
             )
             return sf
 
