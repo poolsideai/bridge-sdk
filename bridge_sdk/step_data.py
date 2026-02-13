@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 
 from bridge_sdk.annotations import extract_step_result_annotation
 from bridge_sdk.function_schema import FunctionSchema
+from bridge_sdk.models import SandboxDefinition
 from bridge_sdk.utils import get_relative_path
 
 
@@ -56,6 +57,8 @@ class StepData(BaseModel):
     """A dictionary of param name to step name, defining which steps results can be used to populate the param."""
     credential_bindings: Optional[Dict[str, str]] = None
     """A dictionary mapping credential UUIDs (from Bridge) to environment variable names. The key is the credential ID (UUID) registered in Bridge, and the value is the environment variable name the credential will be exposed as."""
+    sandbox_definition: Optional[SandboxDefinition] = None
+    """Inline sandbox definition for this step. If provided, the step will use this sandbox configuration instead of the build-level default or sandbox_id reference."""
 
 
 def create_step_data(
@@ -70,6 +73,7 @@ def create_step_data(
     sandbox_id: str | None = None,
     credential_bindings: dict[str, str] | None = None,
     pipeline_name: str | None = None,
+    sandbox_definition: SandboxDefinition | None = None,
 ) -> StepData:
     """Create a StepData object from a step function.
 
@@ -84,9 +88,10 @@ def create_step_data(
         setup_script: Optional script to run before execution.
         post_execution_script: Optional script to run after execution.
         metadata: Optional arbitrary metadata.
-        sandbox_id: Optional execution environment ID.
+        sandbox_id: Optional execution environment ID (references a pre-existing sandbox).
         credential_bindings: Optional credential bindings.
         pipeline_name: Optional pipeline name this step belongs to.
+        sandbox_definition: Optional inline sandbox definition for this step.
 
     Returns:
         A StepData object with all metadata.
@@ -126,4 +131,5 @@ def create_step_data(
         file_line_number=line_number,
         params_from_step_results=params_from_step_results_dict,
         credential_bindings=credential_bindings,
+        sandbox_definition=sandbox_definition,
     )
