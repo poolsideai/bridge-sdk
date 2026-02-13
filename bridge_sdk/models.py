@@ -109,7 +109,7 @@ ContentPart = Annotated[
 
 ContentPartInput = ContentPart | bridge_sidecar_pb2.ContentPart | dict
 
-content_part_adapter = TypeAdapter(ContentPart)
+content_part_adapter: TypeAdapter[ContentPart] = TypeAdapter(ContentPart)
 
 def to_proto_content_part(part: ContentPartInput) -> bridge_sidecar_pb2.ContentPart:
     """Convert a dict, Pydantic model, or proto ContentPart to a proto ContentPart.

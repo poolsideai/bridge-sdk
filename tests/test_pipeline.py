@@ -114,8 +114,8 @@ class TestPipelineClass:
 
     def test_multiple_pipelines_registered(self):
         """Test that multiple pipelines can be registered."""
-        pipeline1 = Pipeline(name="pipeline_one")
-        pipeline2 = Pipeline(name="pipeline_two")
+        _pipeline1 = Pipeline(name="pipeline_one")
+        _pipeline2 = Pipeline(name="pipeline_two")
 
         assert len(PIPELINE_REGISTRY) == 2
         assert "pipeline_one" in PIPELINE_REGISTRY
@@ -123,8 +123,8 @@ class TestPipelineClass:
 
     def test_pipeline_name_override(self):
         """Test that registering a pipeline with same name overrides."""
-        pipeline1 = Pipeline(name="override_test", description="First")
-        pipeline2 = Pipeline(name="override_test", description="Second")
+        _pipeline1 = Pipeline(name="override_test", description="First")
+        _pipeline2 = Pipeline(name="override_test", description="Second")
 
         assert len(PIPELINE_REGISTRY) == 1
         assert PIPELINE_REGISTRY["override_test"].description == "Second"

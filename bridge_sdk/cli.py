@@ -193,7 +193,7 @@ def cmd_check(args):
 
         except Exception as e:
             errors.append(f"Failed to parse pyproject.toml: {e}")
-            print(f"[FAIL] pyproject.toml is valid TOML")
+            print("[FAIL] pyproject.toml is valid TOML")
 
     # Summary
     print()
@@ -289,7 +289,7 @@ async def cmd_run_step(args):
     except json.JSONDecodeError as e:
         print(f"Error parsing results JSON: {e}")
         sys.exit(1)
-    except FileNotFoundError as e:
+    except FileNotFoundError:
         print(f"Error: Results file not found: {args.results_file}")
         sys.exit(1)
 

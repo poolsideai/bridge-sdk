@@ -107,9 +107,9 @@ class StepFunction(Generic[P, R]):
 
         # Type checker can't verify dynamic kwargs match P, but Pydantic validation ensures correctness
         if inspect.iscoroutinefunction(self._func):
-            result = await self._func(**kwargs)  # type: ignore[arg-type]
+            result = await self._func(**kwargs)  # type: ignore[call-arg, arg-type]
         else:
-            result = self._func(**kwargs)  # type: ignore[arg-type]
+            result = self._func(**kwargs)  # type: ignore[call-arg, arg-type]
 
         logger.debug(f"Step {self.step_data.name} completed.")
 
