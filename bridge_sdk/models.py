@@ -61,7 +61,7 @@ class SandboxDefinition(BaseModel):
             return "executed in custom sandbox"
     """
 
-    image: Optional[str] = Field(min_length=1)
+    image: Optional[str] = None
     """The Docker image to use for the sandbox."""
 
     cpu_request: Optional[str] = None
