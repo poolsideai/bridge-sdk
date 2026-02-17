@@ -75,6 +75,7 @@ def hello_world_agent() -> HelloWorldResult:
     post_execution_script="scripts/post_execution_test.sh",
     metadata={"type": "agent"},
     sandbox_definition=SandboxDefinition(
+        memory_limit="4Gi",
         memory_request="4Gi"
     )
 )
