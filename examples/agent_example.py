@@ -24,6 +24,7 @@ from typing import Annotated, Optional
 
 from bridge_sdk import Pipeline, step_result
 from bridge_sdk.bridge_sidecar_client import BridgeSidecarClient
+from bridge_sdk.models import SandboxDefinition
 from bridge_sdk.proto.bridge_sidecar_pb2 import ContinueFrom, RunDetail
 from pydantic import BaseModel
 
@@ -73,6 +74,9 @@ def hello_world_agent() -> HelloWorldResult:
     setup_script="scripts/setup_test.sh",
     post_execution_script="scripts/post_execution_test.sh",
     metadata={"type": "agent"},
+    sandbox_definition=SandboxDefinition(
+        memory_request="4Gi"
+    )
 )
 def continuation_agent(
     input: ContinuationInput,
