@@ -1,0 +1,80 @@
+# Copyright 2026 Poolside, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: "Bridge Index Branch"
+description: "Notify the Poolside Bridge API to index a branch at a specific commit."
+author: "Poolside"
+
+branding:
+  icon: "upload-cloud"
+  color: "blue"
+
+inputs:
+  repository_id:
+    description: "The Poolside Bridge repository ID to target."
+    required: true
+  token:
+    description: "Bearer token for Poolside API authentication."
+    required: true
+  ref:
+    description: "Git branch or tag name. Defaults to the branch that triggered the workflow."
+    required: false
+    default: ""
+  commit_sha:
+    description: "Git commit SHA. Defaults to the HEAD commit of the triggering branch."
+    required: false
+    default: ""
+  api_base_url:
+    description: "Base URL for the Poolside API."
+    required: false
+    default: "https://api.poolsi.de"
+
+runs:
+  using: "composite"
+  steps:
+    - shell: bash
+      env:
+        INPUT_REPOSITORY_ID: ${{ inputs.repository_id }}
+        INPUT_TOKEN: ${{ inputs.token }}
+        INPUT_REF: ${{ inputs.ref }}
+        INPUT_COMMIT_SHA: ${{ inputs.commit_sha }}
+        INPUT_API_BASE_URL: ${{ inputs.api_base_url }}
+        GH_REF_NAME: ${{ github.ref_name }}
+        GH_SHA: ${{ github.sha }}
+      run: |
+        set -euo pipefail
+
+        REF="${INPUT_REF:-$GH_REF_NAME}"
+        SHA="${INPUT_COMMIT_SHA:-$GH_SHA}"
+
+        echo "::add-mask::${INPUT_TOKEN}"
+        echo "Indexing branch '${REF}' at commit ${SHA} for repository ${INPUT_REPOSITORY_ID}"
+
+        HTTP_CODE=$(curl --silent --output response.txt --write-out "%{http_code}" \
+          -X POST \
+          "${INPUT_API_BASE_URL}/v0/bridge/repositories/${INPUT_REPOSITORY_ID}/commits" \
+          -H "accept: application/json" \
+          -H "Authorization: Bearer ${INPUT_TOKEN}" \
+          -H "Content-Type: application/json" \
+          -d "{\"branch\": \"${REF}\", \"commit_hash\": \"${SHA}\"}")
+
+        if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+          echo "::error::Bridge API call failed with HTTP ${HTTP_CODE}"
+          cat response.txt
+          rm -f response.txt
+          exit 1
+        fi
+
+        echo "Bridge API call succeeded (HTTP ${HTTP_CODE})"
+        rm -f response.txt
