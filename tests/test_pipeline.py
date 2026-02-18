@@ -457,10 +457,7 @@ class TestDslOutputFormat:
             },
         }
 
-        json_str = json.dumps(dsl_output, indent=2)
-        assert len(json_str) > 0
-
-        parsed = json.loads(json_str)
+        parsed = json.loads(json.dumps(dsl_output))
         assert parsed["pipelines"]["json_pipeline"]["name"] == "json_pipeline"
         assert parsed["steps"]["json_step"]["pipeline"] == "json_pipeline"
 

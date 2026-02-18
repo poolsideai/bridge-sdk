@@ -281,11 +281,11 @@ def test_get_dsl_output():
 
     dsl_output = get_dsl_output()
 
-    # Should be JSON serializable
-    json.dumps(dsl_output)
+    # Round-trip through JSON and verify structure survives
+    parsed = json.loads(json.dumps(dsl_output))
 
-    assert "dsl_test_step" in dsl_output
-    step_data = dsl_output["dsl_test_step"]
+    assert "dsl_test_step" in parsed
+    step_data = parsed["dsl_test_step"]
     assert "params_json_schema" in step_data
     assert "return_json_schema" in step_data
     assert isinstance(step_data["params_json_schema"], dict)
@@ -349,9 +349,9 @@ def test_step_rid_in_serialization():
     dumped = step_data.model_dump()
     assert dumped["rid"] == "test-step-rid-123"
 
-    # Ensure it's JSON serializable
-    json_str = json.dumps(dumped)
-    assert "test-step-rid-123" in json_str
+    # Round-trip through JSON and verify rid survives
+    parsed = json.loads(json.dumps(dumped))
+    assert parsed["rid"] == "test-step-rid-123"
 
 
 def test_step_rid_with_name_override():
@@ -500,9 +500,10 @@ def test_sandbox_definition_in_dsl_output():
     assert step_output["sandbox_definition"]["image"] == "custom-image:latest"
     assert step_output["sandbox_definition"]["memory_limit"] == "4Gi"
 
-    # Verify entire output is JSON serializable
-    json_str = json.dumps(dsl_output)
-    assert "custom-image:latest" in json_str
+    # Round-trip through JSON and verify sandbox_definition survives
+    parsed = json.loads(json.dumps(dsl_output))
+    assert parsed["dsl_sandbox_step"]["sandbox_definition"]["image"] == "custom-image:latest"
+    assert parsed["dsl_sandbox_step"]["sandbox_definition"]["memory_limit"] == "4Gi"
 
 
 if __name__ == "__main__":
