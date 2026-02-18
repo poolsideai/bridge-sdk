@@ -14,7 +14,7 @@
 
 from typing import Annotated
 
-from bridge_sdk import step, step_result
+from bridge_sdk import step, step_result, SandboxDefinition
 from bridge_sdk.bridge_sidecar_client import BridgeSidecarClient
 from pydantic import BaseModel
 
@@ -32,6 +32,10 @@ class Step1Output(BaseModel):
     setup_script="scripts/setup_test.sh",
     post_execution_script="scripts/post_execution_test.sh",
     metadata={"type": "agent"},
+    sandbox_definition=SandboxDefinition(
+        memory_limit="8Gi",
+        memory_request="4Gi"
+    )
 )
 def step_1(input_data: Step1Input) -> Step1Output:
     print(input_data.value)

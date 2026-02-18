@@ -27,6 +27,7 @@ from bridge_sdk import (
     step,
     step_result,
     STEP_REGISTRY,
+    SandboxDefinition
 )
 from bridge_sdk.cli import (
     discover_steps_and_pipelines,
@@ -114,8 +115,8 @@ class TestPipelineClass:
 
     def test_multiple_pipelines_registered(self):
         """Test that multiple pipelines can be registered."""
-        pipeline1 = Pipeline(name="pipeline_one")
-        pipeline2 = Pipeline(name="pipeline_two")
+        _pipeline1 = Pipeline(name="pipeline_one")
+        _pipeline2 = Pipeline(name="pipeline_two")
 
         assert len(PIPELINE_REGISTRY) == 2
         assert "pipeline_one" in PIPELINE_REGISTRY
@@ -123,8 +124,8 @@ class TestPipelineClass:
 
     def test_pipeline_name_override(self):
         """Test that registering a pipeline with same name overrides."""
-        pipeline1 = Pipeline(name="override_test", description="First")
-        pipeline2 = Pipeline(name="override_test", description="Second")
+        _pipeline1 = Pipeline(name="override_test", description="First")
+        _pipeline2 = Pipeline(name="override_test", description="Second")
 
         assert len(PIPELINE_REGISTRY) == 1
         assert PIPELINE_REGISTRY["override_test"].description == "Second"
@@ -260,7 +261,6 @@ class TestPipelineStepDecorator:
             setup_script="setup.sh",
             post_execution_script="cleanup.sh",
             metadata={"type": "test"},
-            sandbox_id="sandbox-1",
         )
         def my_step() -> str:
             return "test"
@@ -273,7 +273,6 @@ class TestPipelineStepDecorator:
         assert sd.setup_script == "setup.sh"
         assert sd.post_execution_script == "cleanup.sh"
         assert sd.metadata == {"type": "test"}
-        assert sd.execution_environment_id == "sandbox-1"
 
     def test_pipeline_step_data_pipeline_field(self):
         """Test that step_data.pipeline is correctly set."""
@@ -459,10 +458,7 @@ class TestDslOutputFormat:
             },
         }
 
-        json_str = json.dumps(dsl_output, indent=2)
-        assert len(json_str) > 0
-
-        parsed = json.loads(json_str)
+        parsed = json.loads(json.dumps(dsl_output))
         assert parsed["pipelines"]["json_pipeline"]["name"] == "json_pipeline"
         assert parsed["steps"]["json_step"]["pipeline"] == "json_pipeline"
 
@@ -551,6 +547,116 @@ class TestModuleDiscovery:
         # No pipelines in example.py
         # (example.py only has standalone steps)
         assert len(steps) > 0
+
+
+# =============================================================================
+# Sandbox Definition Tests
+# =============================================================================
+
+
+class TestPipelineStepSandboxDefinition:
+    """Tests for sandbox_definition in @pipeline.step decorator."""
+
+    def test_pipeline_step_with_sandbox_definition(self):
+        """Test that Pipeline.step() accepts sandbox_definition parameter."""
+
+        pipeline = Pipeline(name="sandbox_def_pipeline")
+
+        sandbox_def = SandboxDefinition(
+            image="python:3.11-slim",
+            cpu_request="500m",
+            memory_request="1Gi",
+        )
+
+        @pipeline.step(
+            name="step_with_sandbox_def",
+            sandbox_definition=sandbox_def,
+        )
+        def my_step() -> str:
+            return "test"
+
+        assert "step_with_sandbox_def" in STEP_REGISTRY
+        step_data = STEP_REGISTRY["step_with_sandbox_def"].step_data
+        assert step_data.pipeline == "sandbox_def_pipeline"
+        assert step_data.sandbox_definition is not None
+        assert step_data.sandbox_definition.image == "python:3.11-slim"
+        assert step_data.sandbox_definition.cpu_request == "500m"
+        assert step_data.sandbox_definition.memory_request == "1Gi"
+
+    def test_pipeline_step_sandbox_definition_serialization(self):
+        """Test that sandbox_definition is serialized correctly for Pipeline steps."""
+        pipeline = Pipeline(name="serialize_pipeline")
+
+        sandbox_def = SandboxDefinition(
+            image="pytorch/pytorch:latest",
+            memory_limit="8Gi",
+            storage_request="100Gi",
+        )
+
+        @pipeline.step(sandbox_definition=sandbox_def)
+        def ml_step() -> str:
+            return "ML"
+
+        step_data = STEP_REGISTRY["ml_step"].step_data
+        dumped = step_data.model_dump(exclude_none=True)
+
+        assert "sandbox_definition" in dumped
+        assert dumped["sandbox_definition"]["image"] == "pytorch/pytorch:latest"
+        assert dumped["sandbox_definition"]["memory_limit"] == "8Gi"
+        assert dumped["sandbox_definition"]["storage_request"] == "100Gi"
+
+        # Verify JSON round-trip
+        json_str = json.dumps(dumped)
+        parsed = json.loads(json_str)
+        assert parsed["sandbox_definition"]["image"] == "pytorch/pytorch:latest"
+        assert parsed["sandbox_definition"]["memory_limit"] == "8Gi"
+        assert parsed["sandbox_definition"]["storage_request"] == "100Gi"
+
+    def test_pipeline_step_without_sandbox_definition(self):
+        """Test that Pipeline steps without sandbox_definition have None value."""
+        pipeline = Pipeline(name="no_sandbox_pipeline")
+
+        @pipeline.step
+        def plain_step() -> str:
+            return "plain"
+
+        step_data = STEP_REGISTRY["plain_step"].step_data
+        assert step_data.sandbox_definition is None
+
+        dumped = step_data.model_dump(exclude_none=True)
+        assert "sandbox_definition" not in dumped
+
+    def test_pipeline_step_sandbox_def_with_other_options(self):
+        """Test sandbox_definition combined with other step options."""
+        pipeline = Pipeline(name="combined_options_pipeline")
+
+        sandbox_def = SandboxDefinition(
+            cpu_request="4",
+            image="gpu-image:cuda11",
+            memory_limit="32Gi",
+            memory_request="16Gi",
+        )
+
+        @pipeline.step(
+            name="combined_step",
+            rid="combined-step-rid-123",
+            description="A step with many options",
+            setup_script="setup.sh",
+            metadata={"gpu": True},
+            sandbox_definition=sandbox_def,
+        )
+        def combined_step() -> str:
+            return "combined"
+
+        step_data = STEP_REGISTRY["combined_step"].step_data
+        assert step_data.name == "combined_step"
+        assert step_data.rid == "combined-step-rid-123"
+        assert step_data.description == "A step with many options"
+        assert step_data.setup_script == "setup.sh"
+        assert step_data.metadata == {"gpu": True}
+        assert step_data.sandbox_definition is not None
+        assert step_data.sandbox_definition.image == "gpu-image:cuda11"
+        assert step_data.sandbox_definition.cpu_request == "4"
 
 
 if __name__ == "__main__":

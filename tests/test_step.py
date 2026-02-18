@@ -14,14 +14,18 @@
 
 """Tests for the step decorator functionality."""
 
+import importlib.util
+import json
 import os
-import pytest
+import sys
 import tempfile
+
+import pytest
 from pathlib import Path
 from typing import Annotated, Literal, Union
 from pydantic import BaseModel, Discriminator
 
-from bridge_sdk import step, STEP_REGISTRY, StepData, get_dsl_output, step_result
+from bridge_sdk import step, STEP_REGISTRY, StepData, get_dsl_output, step_result, SandboxDefinition
 
 
 # Test Pydantic models
@@ -50,7 +54,6 @@ def test_step_decorator_registers_step_with_all_fields():
         setup_script="setup.sh",
         post_execution_script="cleanup.sh",
         metadata={"type": "test"},
-        sandbox_id="test-sandbox",
     )
     def complete_test_func() -> str:
         return "complete"
@@ -69,7 +72,6 @@ def test_step_decorator_registers_step_with_all_fields():
     assert step_data.setup_script == "setup.sh"
     assert step_data.post_execution_script == "cleanup.sh"
     assert step_data.metadata == {"type": "test"}
-    assert step_data.execution_environment_id == "test-sandbox"
     assert step_data.depends_on == []  # No step_result annotations
     assert step_data.file_path == "tests/test_step.py"
     assert step_data.file_line_number is not None
@@ -187,9 +189,6 @@ def test_step_result_with_step_object_references():
 
 def test_file_path_resolution_in_sandbox_environment():
     """Test that file_path resolution works when repo is cloned to a temp location."""
-    import importlib.util
-    import sys
-
     with tempfile.TemporaryDirectory() as tmpdir:
         repo_root = Path(tmpdir) / "repo"
         repo_root.mkdir()
@@ -275,19 +274,17 @@ def test_params_and_return_json_schema():
 
 def test_get_dsl_output():
     """Test that get_dsl_output returns JSON-serializable data."""
-    import json
-
     @step(name="dsl_test_step")
     def dsl_test_step(input_data: SimpleInput) -> SimpleOutput:
         return SimpleOutput(result=input_data.value)
 
     dsl_output = get_dsl_output()
 
-    # Should be JSON serializable
-    json.dumps(dsl_output)
+    # Round-trip through JSON and verify structure survives
+    parsed = json.loads(json.dumps(dsl_output))
 
-    assert "dsl_test_step" in dsl_output
-    step_data = dsl_output["dsl_test_step"]
+    assert "dsl_test_step" in parsed
+    step_data = parsed["dsl_test_step"]
     assert "params_json_schema" in step_data
     assert "return_json_schema" in step_data
     assert isinstance(step_data["params_json_schema"], dict)
@@ -341,8 +338,6 @@ def test_pipeline_field_in_serialization():
 
 def test_step_rid_in_serialization():
     """Test that rid is included in step data serialization."""
-    import json
-
     @step(rid="test-step-rid-123")
     def step_rid_serialize() -> str:
         return "test"
@@ -351,9 +346,9 @@ def test_step_rid_in_serialization():
     dumped = step_data.model_dump()
     assert dumped["rid"] == "test-step-rid-123"
 
-    # Ensure it's JSON serializable
-    json_str = json.dumps(dumped)
-    assert "test-step-rid-123" in json_str
+    # Round-trip through JSON and verify rid survives
+    parsed = json.loads(json.dumps(dumped))
+    assert parsed["rid"] == "test-step-rid-123"
 
 
 def test_step_rid_with_name_override():
@@ -367,6 +362,137 @@ def test_step_rid_with_name_override():
     step_data = STEP_REGISTRY["custom_name_with_rid"].step_data
     assert step_data.name == "custom_name_with_rid"
     assert step_data.rid == "custom-rid-456"
+
+
+def test_step_with_sandbox_definition():
+    """Test that @step decorator accepts sandbox_definition parameter and includes it in StepData."""
+
+    sandbox_def = SandboxDefinition(
+        image="python:3.11-slim",
+        cpu_request="500m",
+        memory_request="512Mi",
+        memory_limit="1Gi",
+    )
+
+    @step(
+        name="step_with_sandbox",
+        sandbox_definition=sandbox_def,
+    )
+    def my_step() -> str:
+        return "test"
+
+    assert "step_with_sandbox" in STEP_REGISTRY
+    step_data = STEP_REGISTRY["step_with_sandbox"].step_data
+    assert step_data.sandbox_definition is not None
+    assert step_data.sandbox_definition.image == "python:3.11-slim"
+    assert step_data.sandbox_definition.cpu_request == "500m"
+    assert step_data.sandbox_definition.memory_request == "512Mi"
+    assert step_data.sandbox_definition.memory_limit == "1Gi"
+    assert step_data.sandbox_definition.storage_request is None
+    assert step_data.sandbox_definition.storage_limit is None
+
+
+def test_step_data_sandbox_definition_serialization():
+    """Test that SandboxDefinition is correctly serialized in model_dump(exclude_none=True) output."""
+    sandbox_def = SandboxDefinition(
+        image="pytorch/pytorch:2.0.0-cuda11.7-cudnn8-runtime",
+        cpu_request="2",
+        memory_request="4Gi",
+        memory_limit="8Gi",
+        storage_request="50Gi",
+    )
+
+    @step(
+        name="step_for_serialization",
+        sandbox_definition=sandbox_def,
+    )
+    def serialize_step() -> str:
+        return "test"
+
+    step_data = STEP_REGISTRY["step_for_serialization"].step_data
+    dumped = step_data.model_dump(exclude_none=True)
+
+    # Verify sandbox_definition is in the serialized output
+    assert "sandbox_definition" in dumped
+    assert dumped["sandbox_definition"]["image"] == "pytorch/pytorch:2.0.0-cuda11.7-cudnn8-runtime"
+    assert dumped["sandbox_definition"]["cpu_request"] == "2"
+    assert dumped["sandbox_definition"]["memory_request"] == "4Gi"
+    assert dumped["sandbox_definition"]["memory_limit"] == "8Gi"
+    assert dumped["sandbox_definition"]["storage_request"] == "50Gi"
+    # storage_limit is None so should be excluded
+    assert "storage_limit" not in dumped["sandbox_definition"]
+
+    # Verify JSON serializable
+    json_str = json.dumps(dumped)
+    parsed = json.loads(json_str)
+    assert parsed["sandbox_definition"]["image"] == "pytorch/pytorch:2.0.0-cuda11.7-cudnn8-runtime"
+
+
+def test_step_without_sandbox_definition():
+    """Test that step without sandbox_definition has None value and is excluded from serialization."""
+
+    @step(name="step_no_sandbox_def")
+    def no_sandbox_step() -> str:
+        return "test"
+
+    step_data = STEP_REGISTRY["step_no_sandbox_def"].step_data
+    assert step_data.sandbox_definition is None
+
+    # When using exclude_none=True, sandbox_definition should not appear
+    dumped = step_data.model_dump(exclude_none=True)
+    assert "sandbox_definition" not in dumped
+
+
+def test_sandbox_definition_validation():
+    """Test that SandboxDefinition validates fields correctly."""
+    # Valid: image is provided
+    valid_sandbox = SandboxDefinition(image="ubuntu:22.04")
+    assert valid_sandbox.image == "ubuntu:22.04"
+
+    # Valid: with optional fields
+    full_sandbox = SandboxDefinition(
+        cpu_request="1",
+        image="python:3.11",
+        memory_limit="2Gi",
+        memory_request="1Gi",
+        storage_limit="20Gi",
+        storage_request="10Gi",
+    )
+    assert full_sandbox.cpu_request == "1"
+    assert full_sandbox.storage_limit == "20Gi"
+
+    # Valid: all fields are optional
+    minimal_sandbox = SandboxDefinition()
+    assert minimal_sandbox.image is None
+
+
+def test_sandbox_definition_in_dsl_output():
+    """Test that sandbox_definition appears in get_dsl_output()."""
+
+    sandbox_def = SandboxDefinition(
+        image="custom-image:latest",
+        memory_limit="4Gi",
+    )
+
+    @step(
+        name="dsl_sandbox_step",
+        sandbox_definition=sandbox_def,
+    )
+    def dsl_sandbox_func() -> str:
+        return "test"
+
+    dsl_output = get_dsl_output()
+    assert "dsl_sandbox_step" in dsl_output
+
+    step_output = dsl_output["dsl_sandbox_step"]
+    assert "sandbox_definition" in step_output
+    assert step_output["sandbox_definition"]["image"] == "custom-image:latest"
+    assert step_output["sandbox_definition"]["memory_limit"] == "4Gi"
+
+    # Round-trip through JSON and verify sandbox_definition survives
+    parsed = json.loads(json.dumps(dsl_output))
+    assert parsed["dsl_sandbox_step"]["sandbox_definition"]["image"] == "custom-image:latest"
+    assert parsed["dsl_sandbox_step"]["sandbox_definition"]["memory_limit"] == "4Gi"
 
 
 if __name__ == "__main__":
