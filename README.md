@@ -262,6 +262,39 @@ def my_step() -> str:
     return f"authenticated"
 ```
 
+### Sandbox Definition
+
+Optionally, use `SandboxDefinition` to customize the compute resources for a step's sandbox environment:
+
+```python
+from bridge_sdk import Pipeline, SandboxDefinition
+
+pipeline = Pipeline(name="my_pipeline")
+
+@pipeline.step(
+    sandbox_definition=SandboxDefinition(
+        image="python:3.11-slim",
+        cpu_request="2",
+        memory_request="4Gi",
+        memory_limit="8Gi",
+        storage_request="50Gi",
+    ),
+)
+def my_step() -> str:
+    return "done"
+```
+
+All fields are optional:
+
+| Field | Description | Example |
+|-------|-------------|---------|
+| `image` | Container image | `"python:3.11-slim"` |
+| `cpu_request` | CPU request | `"2"` |
+| `memory_request` | Memory request | `"4Gi"` |
+| `memory_limit` | Memory limit | `"8Gi"` |
+| `storage_request` | Storage request | `"50Gi"` |
+| `storage_limit` | Storage limit | `"100Gi"` |
+
 ### Async Steps
 
 ```python
@@ -394,6 +427,7 @@ from bridge_sdk import (
     step_result,       # Annotation helper for step dependencies
     StepFunction,      # Type for decorated step functions
     StepData,          # Pydantic model for step metadata
+    SandboxDefinition, # Optional compute resources for a step's sandbox
     STEP_REGISTRY,     # Global registry of discovered steps
     get_dsl_output,    # Generate DSL from registry
 )

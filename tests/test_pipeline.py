@@ -27,6 +27,7 @@ from bridge_sdk import (
     step,
     step_result,
     STEP_REGISTRY,
+    SandboxDefinition
 )
 from bridge_sdk.cli import (
     discover_steps_and_pipelines,
@@ -558,7 +559,6 @@ class TestPipelineStepSandboxDefinition:
 
     def test_pipeline_step_with_sandbox_definition(self):
         """Test that Pipeline.step() accepts sandbox_definition parameter."""
-        from bridge_sdk import SandboxDefinition
 
         pipeline = Pipeline(name="sandbox_def_pipeline")
 
@@ -585,9 +585,6 @@ class TestPipelineStepSandboxDefinition:
 
     def test_pipeline_step_sandbox_definition_serialization(self):
         """Test that sandbox_definition is serialized correctly for Pipeline steps."""
-        import json
-        from bridge_sdk import SandboxDefinition
-
         pipeline = Pipeline(name="serialize_pipeline")
 
         sandbox_def = SandboxDefinition(
@@ -631,8 +628,6 @@ class TestPipelineStepSandboxDefinition:
 
     def test_pipeline_step_sandbox_def_with_other_options(self):
         """Test sandbox_definition combined with other step options."""
-        from bridge_sdk import SandboxDefinition
-
         pipeline = Pipeline(name="combined_options_pipeline")
 
         sandbox_def = SandboxDefinition(

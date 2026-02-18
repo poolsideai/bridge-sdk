@@ -14,14 +14,18 @@
 
 """Tests for the step decorator functionality."""
 
+import importlib.util
+import json
 import os
-import pytest
+import sys
 import tempfile
+
+import pytest
 from pathlib import Path
 from typing import Annotated, Literal, Union
 from pydantic import BaseModel, Discriminator
 
-from bridge_sdk import step, STEP_REGISTRY, StepData, get_dsl_output, step_result
+from bridge_sdk import step, STEP_REGISTRY, StepData, get_dsl_output, step_result, SandboxDefinition
 
 
 # Test Pydantic models
@@ -185,9 +189,6 @@ def test_step_result_with_step_object_references():
 
 def test_file_path_resolution_in_sandbox_environment():
     """Test that file_path resolution works when repo is cloned to a temp location."""
-    import importlib.util
-    import sys
-
     with tempfile.TemporaryDirectory() as tmpdir:
         repo_root = Path(tmpdir) / "repo"
         repo_root.mkdir()
@@ -273,8 +274,6 @@ def test_params_and_return_json_schema():
 
 def test_get_dsl_output():
     """Test that get_dsl_output returns JSON-serializable data."""
-    import json
-
     @step(name="dsl_test_step")
     def dsl_test_step(input_data: SimpleInput) -> SimpleOutput:
         return SimpleOutput(result=input_data.value)
@@ -339,8 +338,6 @@ def test_pipeline_field_in_serialization():
 
 def test_step_rid_in_serialization():
     """Test that rid is included in step data serialization."""
-    import json
-
     @step(rid="test-step-rid-123")
     def step_rid_serialize() -> str:
         return "test"
@@ -369,7 +366,6 @@ def test_step_rid_with_name_override():
 
 def test_step_with_sandbox_definition():
     """Test that @step decorator accepts sandbox_definition parameter and includes it in StepData."""
-    from bridge_sdk import SandboxDefinition
 
     sandbox_def = SandboxDefinition(
         image="python:3.11-slim",
@@ -398,9 +394,6 @@ def test_step_with_sandbox_definition():
 
 def test_step_data_sandbox_definition_serialization():
     """Test that SandboxDefinition is correctly serialized in model_dump(exclude_none=True) output."""
-    import json
-    from bridge_sdk import SandboxDefinition
-
     sandbox_def = SandboxDefinition(
         image="pytorch/pytorch:2.0.0-cuda11.7-cudnn8-runtime",
         cpu_request="2",
@@ -452,8 +445,6 @@ def test_step_without_sandbox_definition():
 
 def test_sandbox_definition_validation():
     """Test that SandboxDefinition validates fields correctly."""
-    from bridge_sdk import SandboxDefinition
-
     # Valid: image is provided
     valid_sandbox = SandboxDefinition(image="ubuntu:22.04")
     assert valid_sandbox.image == "ubuntu:22.04"
@@ -477,8 +468,6 @@ def test_sandbox_definition_validation():
 
 def test_sandbox_definition_in_dsl_output():
     """Test that sandbox_definition appears in get_dsl_output()."""
-    import json
-    from bridge_sdk import SandboxDefinition, get_dsl_output
 
     sandbox_def = SandboxDefinition(
         image="custom-image:latest",
