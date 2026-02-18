@@ -41,8 +41,6 @@ class StepData(BaseModel):
     """The script to run after the step execution."""
     metadata: Optional[Dict[str, Any]] = None
     """Arbitrary metadata for the step."""
-    execution_environment_id: Optional[str] = None
-    """ID of the execution environment that the step will be executed in. If not provided, a default sandbox will be used."""
     depends_on: List[str] = Field(default_factory=list)
     """The steps that this step depends on. Either a step name if defined in the same repository, or a step ID."""
     file_path: Optional[str] = None
@@ -58,7 +56,7 @@ class StepData(BaseModel):
     credential_bindings: Optional[Dict[str, str]] = None
     """A dictionary mapping credential UUIDs (from Bridge) to environment variable names. The key is the credential ID (UUID) registered in Bridge, and the value is the environment variable name the credential will be exposed as."""
     sandbox_definition: Optional[SandboxDefinition] = None
-    """Inline sandbox definition for this step. If provided, the step will use this sandbox configuration instead of the build-level default or sandbox_id reference."""
+    """Inline sandbox definition for this step. If provided, the step will use this sandbox configuration instead of the build-level default."""
 
 
 def create_step_data(
@@ -70,7 +68,6 @@ def create_step_data(
     setup_script: str | None = None,
     post_execution_script: str | None = None,
     metadata: dict[str, Any] | None = None,
-    sandbox_id: str | None = None,
     credential_bindings: dict[str, str] | None = None,
     pipeline_name: str | None = None,
     sandbox_definition: SandboxDefinition | None = None,
@@ -88,7 +85,6 @@ def create_step_data(
         setup_script: Optional script to run before execution.
         post_execution_script: Optional script to run after execution.
         metadata: Optional arbitrary metadata.
-        sandbox_id: Optional execution environment ID (references a pre-existing sandbox).
         credential_bindings: Optional credential bindings.
         pipeline_name: Optional pipeline name this step belongs to.
         sandbox_definition: Optional inline sandbox definition for this step.
@@ -123,7 +119,6 @@ def create_step_data(
         setup_script=setup_script,
         post_execution_script=post_execution_script,
         metadata=metadata,
-        execution_environment_id=sandbox_id,
         depends_on=list(resolved_depends_on),
         params_json_schema=function_schema.params_json_schema,
         return_json_schema=function_schema.return_json_schema,

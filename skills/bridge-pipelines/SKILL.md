@@ -111,7 +111,6 @@ Steps are the execution units. Use `@pipeline.step` to bind a step to a pipeline
     setup_script="scripts/setup.sh",      # runs before step
     post_execution_script="scripts/cleanup.sh",  # runs after step
     metadata={"type": "agent"},           # arbitrary metadata
-    sandbox_id="sandbox-123",             # execution environment
     credential_bindings={                 # credential UUID → env var
         "cred-uuid": "API_KEY",
     },

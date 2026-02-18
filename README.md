@@ -240,7 +240,6 @@ This defines a three-step DAG: `fetch_data → clean_data → summarize`. No exp
     setup_script="setup.sh",
     post_execution_script="cleanup.sh",
     metadata={"type": "agent"},
-    sandbox_id="my-sandbox",
 )
 def my_step() -> str:
     return "done"

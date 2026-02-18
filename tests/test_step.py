@@ -50,7 +50,6 @@ def test_step_decorator_registers_step_with_all_fields():
         setup_script="setup.sh",
         post_execution_script="cleanup.sh",
         metadata={"type": "test"},
-        sandbox_id="test-sandbox",
     )
     def complete_test_func() -> str:
         return "complete"
@@ -69,7 +68,6 @@ def test_step_decorator_registers_step_with_all_fields():
     assert step_data.setup_script == "setup.sh"
     assert step_data.post_execution_script == "cleanup.sh"
     assert step_data.metadata == {"type": "test"}
-    assert step_data.execution_environment_id == "test-sandbox"
     assert step_data.depends_on == []  # No step_result annotations
     assert step_data.file_path == "tests/test_step.py"
     assert step_data.file_line_number is not None
@@ -453,9 +451,7 @@ def test_step_without_sandbox_definition():
 
 
 def test_sandbox_definition_validation():
-    """Test that SandboxDefinition validates required image field."""
-    import pytest as pt
-    from pydantic import ValidationError
+    """Test that SandboxDefinition validates fields correctly."""
     from bridge_sdk import SandboxDefinition
 
     # Valid: image is provided
@@ -464,23 +460,19 @@ def test_sandbox_definition_validation():
 
     # Valid: with optional fields
     full_sandbox = SandboxDefinition(
-        image="python:3.11",
         cpu_request="1",
-        memory_request="1Gi",
+        image="python:3.11",
         memory_limit="2Gi",
-        storage_request="10Gi",
+        memory_request="1Gi",
         storage_limit="20Gi",
+        storage_request="10Gi",
     )
     assert full_sandbox.cpu_request == "1"
     assert full_sandbox.storage_limit == "20Gi"
 
-    # Invalid: empty image string
-    with pt.raises(ValidationError):
-        SandboxDefinition(image="")
-
-    # Invalid: missing required image field
-    with pt.raises(ValidationError):
-        SandboxDefinition()  # type: ignore[call-arg]
+    # Valid: all fields are optional
+    minimal_sandbox = SandboxDefinition()
+    assert minimal_sandbox.image is None
 
 
 def test_sandbox_definition_in_dsl_output():

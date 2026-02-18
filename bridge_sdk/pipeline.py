@@ -93,7 +93,6 @@ class Pipeline:
         setup_script: str | None = ...,
         post_execution_script: str | None = ...,
         metadata: dict[str, Any] | None = ...,
-        sandbox_id: str | None = ...,
         credential_bindings: dict[str, str] | None = ...,
         sandbox_definition: SandboxDefinition | None = ...,
     ) -> StepFunction[P, R]:
@@ -110,7 +109,6 @@ class Pipeline:
         setup_script: str | None = ...,
         post_execution_script: str | None = ...,
         metadata: dict[str, Any] | None = ...,
-        sandbox_id: str | None = ...,
         credential_bindings: dict[str, str] | None = ...,
         sandbox_definition: SandboxDefinition | None = ...,
     ) -> Callable[[Callable[P, R]], StepFunction[P, R]]:
@@ -127,7 +125,6 @@ class Pipeline:
         setup_script: str | None = None,
         post_execution_script: str | None = None,
         metadata: dict[str, Any] | None = None,
-        sandbox_id: str | None = None,
         credential_bindings: dict[str, str] | None = None,
         sandbox_definition: SandboxDefinition | None = None,
     ) -> StepFunction[P, R] | Callable[[Callable[P, R]], StepFunction[P, R]]:
@@ -145,7 +142,6 @@ class Pipeline:
                 setup_script=setup_script,
                 post_execution_script=post_execution_script,
                 metadata=metadata,
-                sandbox_id=sandbox_id,
                 credential_bindings=credential_bindings,
                 pipeline_name=self.name,
                 sandbox_definition=sandbox_definition,

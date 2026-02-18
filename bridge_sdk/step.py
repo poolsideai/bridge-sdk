@@ -37,7 +37,6 @@ def step(
     setup_script: str | None = None,
     post_execution_script: str | None = None,
     metadata: dict[str, Any] | None = None,
-    sandbox_id: str | None = None,
     credential_bindings: dict[str, str] | None = None,
     sandbox_definition: SandboxDefinition | None = None,
 ) -> StepFunction[P, R]:
@@ -54,7 +53,6 @@ def step(
     setup_script: str | None = None,
     post_execution_script: str | None = None,
     metadata: dict[str, Any] | None = None,
-    sandbox_id: str | None = None,
     credential_bindings: dict[str, str] | None = None,
     sandbox_definition: SandboxDefinition | None = None,
 ) -> Callable[[Callable[P, R]], StepFunction[P, R]]:
@@ -71,7 +69,6 @@ def step(
     setup_script: str | None = None,
     post_execution_script: str | None = None,
     metadata: dict[str, Any] | None = None,
-    sandbox_id: str | None = None,
     credential_bindings: dict[str, str] | None = None,
     sandbox_definition: SandboxDefinition | None = None,
 ) -> StepFunction[P, R] | Callable[[Callable[P, R]], StepFunction[P, R]]:
@@ -87,7 +84,6 @@ def step(
         setup_script: Optional script to run before step execution.
         post_execution_script: Optional script to run after step execution.
         metadata: Optional arbitrary metadata dict.
-        sandbox_id: Optional execution environment ID (references a pre-existing sandbox).
         credential_bindings: Optional credential name to ID mappings.
         sandbox_definition: Optional inline sandbox definition specifying Docker image
             and resource requirements for this step's execution environment.
@@ -105,7 +101,6 @@ def step(
             setup_script=setup_script,
             post_execution_script=post_execution_script,
             metadata=metadata,
-            sandbox_id=sandbox_id,
             credential_bindings=credential_bindings,
             sandbox_definition=sandbox_definition,
         )

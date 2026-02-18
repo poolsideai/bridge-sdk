@@ -260,7 +260,6 @@ class TestPipelineStepDecorator:
             setup_script="setup.sh",
             post_execution_script="cleanup.sh",
             metadata={"type": "test"},
-            sandbox_id="sandbox-1",
         )
         def my_step() -> str:
             return "test"
@@ -273,7 +272,6 @@ class TestPipelineStepDecorator:
         assert sd.setup_script == "setup.sh"
         assert sd.post_execution_script == "cleanup.sh"
         assert sd.metadata == {"type": "test"}
-        assert sd.execution_environment_id == "sandbox-1"
 
     def test_pipeline_step_data_pipeline_field(self):
         """Test that step_data.pipeline is correctly set."""
@@ -613,9 +611,12 @@ class TestPipelineStepSandboxDefinition:
         assert dumped["sandbox_definition"]["memory_limit"] == "8Gi"
         assert dumped["sandbox_definition"]["storage_request"] == "100Gi"
 
-        # Verify JSON serializable
+        # Verify JSON round-trip
         json_str = json.dumps(dumped)
-        assert "pytorch/pytorch:latest" in json_str
+        parsed = json.loads(json_str)
+        assert parsed["sandbox_definition"]["image"] == "pytorch/pytorch:latest"
+        assert parsed["sandbox_definition"]["memory_limit"] == "8Gi"
+        assert parsed["sandbox_definition"]["storage_request"] == "100Gi"
 
     def test_pipeline_step_without_sandbox_definition(self):
         """Test that Pipeline steps without sandbox_definition have None value."""
@@ -638,10 +639,10 @@ class TestPipelineStepSandboxDefinition:
         pipeline = Pipeline(name="combined_options_pipeline")
 
         sandbox_def = SandboxDefinition(
-            image="gpu-image:cuda11",
             cpu_request="4",
-            memory_request="16Gi",
+            image="gpu-image:cuda11",
             memory_limit="32Gi",
+            memory_request="16Gi",
         )
 
         @pipeline.step(
