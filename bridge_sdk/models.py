@@ -80,6 +80,72 @@ class SandboxDefinition(BaseModel):
     """Storage limit in Kubernetes format (e.g., '50Gi')."""
 
 
+class WebhookProvider(str):
+    """Supported webhook provider identifiers.
+
+    Each provider has its own signature verification scheme and header conventions.
+    """
+
+    GITHUB = "github"
+    GITLAB = "gitlab"
+    GRAFANA = "grafana"
+    LINEAR = "linear"
+    SLACK = "slack"
+    STRIPE = "stripe"
+    GENERIC_HMAC_SHA1 = "generic_hmac_sha1"
+    GENERIC_HMAC_SHA256 = "generic_hmac_sha256"
+
+
+class Webhook(BaseModel):
+    """Defines a webhook trigger for a pipeline.
+
+    Webhooks are declared in pipeline code and discovered during indexing.
+    They start disabled — the user configures a signing secret and enables
+    the webhook via the API or UI.
+
+    Attributes:
+        name: Unique name for this webhook within the pipeline + branch.
+        provider: The webhook provider (determines signature verification).
+        filter_expression: CEL expression evaluated against the payload and headers.
+            Must return bool. The webhook triggers only when this evaluates to true.
+        transform_expression: CEL expression that transforms the payload into
+            step inputs. Must return map(string, dyn) keyed by step name.
+        idempotency_key_expression: Optional CEL expression that extracts a
+            deduplication key from the payload. Must return string.
+
+    Example::
+
+        from bridge_sdk import Pipeline, Webhook, WebhookProvider
+
+        pipeline = Pipeline(
+            name="on_issue_update",
+            webhooks=[
+                Webhook(
+                    name="linear-issues",
+                    provider=WebhookProvider.LINEAR,
+                    filter_expression='payload.type == "Issue" && payload.action == "update"',
+                    transform_expression='{"triage_step": {"issue": payload.data}}',
+                ),
+            ],
+        )
+    """
+
+    name: str
+    """Unique name for this webhook within the pipeline + branch."""
+
+    provider: str
+    """The webhook provider identifier (e.g. 'github', 'linear')."""
+
+    filter_expression: str
+    """CEL expression that determines whether this webhook should fire. Must return bool."""
+
+    transform_expression: str
+    """CEL expression that transforms the payload into step inputs. Must return map(string, dyn)."""
+
+    idempotency_key_expression: Optional[str] = None
+    """Optional CEL expression to extract a deduplication key. Must return string."""
+
+
 class ImageURLContent(BaseModel):
     url: str = Field(min_length=1)
 
