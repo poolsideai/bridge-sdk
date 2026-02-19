@@ -672,11 +672,13 @@ class TestWebhookModel:
     def test_webhook_minimal(self):
         """Test Webhook with required fields only."""
         wh = Webhook(
+            branch="main",
+            filter_expression="true",
             name="my-hook",
             provider=WebhookProvider.LINEAR,
-            filter_expression="true",
             transform_expression=".",
         )
+        assert wh.branch == "main"
         assert wh.name == "my-hook"
         assert wh.provider == "linear"
         assert wh.filter_expression == "true"
@@ -686,20 +688,22 @@ class TestWebhookModel:
     def test_webhook_with_idempotency_key(self):
         """Test Webhook with optional idempotency_key_expression."""
         wh = Webhook(
+            branch="main",
+            filter_expression='payload.action == "opened"',
+            idempotency_key_expression="payload.delivery_id",
             name="dedup-hook",
             provider=WebhookProvider.GITHUB,
-            filter_expression='payload.action == "opened"',
             transform_expression='{"step": payload}',
-            idempotency_key_expression="payload.delivery_id",
         )
         assert wh.idempotency_key_expression == "payload.delivery_id"
 
     def test_webhook_serialization(self):
         """Test Webhook model serialization round-trip."""
         wh = Webhook(
+            branch="main",
+            filter_expression='payload.type == "invoice.paid"',
             name="serial-hook",
             provider=WebhookProvider.STRIPE,
-            filter_expression='payload.type == "invoice.paid"',
             transform_expression='{"billing_step": payload.data.object}',
         )
         dumped = wh.model_dump()
@@ -729,9 +733,10 @@ class TestPipelineWebhooks:
         """Test Pipeline instantiation with webhooks."""
         webhooks = [
             Webhook(
+                branch="main",
+                filter_expression='payload.ref == "refs/heads/main"',
                 name="on-push",
                 provider=WebhookProvider.GITHUB,
-                filter_expression='payload.ref == "refs/heads/main"',
                 transform_expression='{"index_step": payload}',
             ),
         ]
@@ -749,9 +754,10 @@ class TestPipelineWebhooks:
         """Test that webhooks are preserved in the registry."""
         webhooks = [
             Webhook(
+                branch="main",
+                filter_expression="true",
                 name="hook-a",
                 provider=WebhookProvider.LINEAR,
-                filter_expression="true",
                 transform_expression=".",
             ),
         ]
@@ -765,15 +771,17 @@ class TestPipelineWebhooks:
         """Test Pipeline with multiple webhooks."""
         webhooks = [
             Webhook(
+                branch="main",
+                filter_expression='payload.type == "Issue"',
                 name="linear-hook",
                 provider=WebhookProvider.LINEAR,
-                filter_expression='payload.type == "Issue"',
                 transform_expression='{"triage": payload.data}',
             ),
             Webhook(
+                branch="main",
+                filter_expression='payload.action == "opened"',
                 name="github-hook",
                 provider=WebhookProvider.GITHUB,
-                filter_expression='payload.action == "opened"',
                 transform_expression='{"review": payload.pull_request}',
             ),
         ]
@@ -784,11 +792,12 @@ class TestPipelineWebhooks:
         """Test PipelineData serialization with webhooks."""
         webhooks = [
             Webhook(
+                branch="main",
+                filter_expression='payload.type == "message"',
+                idempotency_key_expression="payload.event_id",
                 name="data-hook",
                 provider=WebhookProvider.SLACK,
-                filter_expression='payload.type == "message"',
                 transform_expression='{"chat_step": payload}',
-                idempotency_key_expression="payload.event_id",
             ),
         ]
         data = PipelineData(
@@ -815,9 +824,10 @@ class TestPipelineWebhooks:
         """Test that webhooks appear in the full DSL output structure."""
         webhooks = [
             Webhook(
+                branch="main",
+                filter_expression='payload.state == "alerting"',
                 name="dsl-hook",
                 provider=WebhookProvider.GRAFANA,
-                filter_expression='payload.state == "alerting"',
                 transform_expression='{"alert_step": payload}',
             ),
         ]
@@ -856,9 +866,10 @@ class TestPipelineWebhooks:
         """Test that Pipeline repr includes webhooks."""
         webhooks = [
             Webhook(
+                branch="main",
+                filter_expression="true",
                 name="repr-hook",
                 provider=WebhookProvider.LINEAR,
-                filter_expression="true",
                 transform_expression=".",
             ),
         ]

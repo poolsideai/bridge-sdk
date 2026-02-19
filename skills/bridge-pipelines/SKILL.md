@@ -182,17 +182,19 @@ pipeline = Pipeline(
     name="on_issue_update",
     webhooks=[
         Webhook(
+            branch="main",
+            filter_expression='payload.type == "Issue" && payload.action == "update"',
             name="linear-issues",
             provider=WebhookProvider.LINEAR,
-            filter_expression='payload.type == "Issue" && payload.action == "update"',
             transform_expression='{"triage_step": {"issue": payload.data}}',
         ),
         Webhook(
+            branch="main",
+            filter_expression='payload.ref == "refs/heads/main"',
+            idempotency_key_expression="headers.X-GitHub-Delivery",
             name="github-push",
             provider=WebhookProvider.GITHUB,
-            filter_expression='payload.ref == "refs/heads/main"',
             transform_expression='{"index_step": payload}',
-            idempotency_key_expression="headers.X-GitHub-Delivery",
         ),
     ],
 )
@@ -202,11 +204,12 @@ pipeline = Pipeline(
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
+| `branch` | `str` | Yes | The git branch this webhook applies to |
+| `filter_expression` | `str` | Yes | CEL expression returning `bool` — webhook fires only when true |
+| `idempotency_key_expression` | `str` | No | CEL expression returning `string` for deduplication |
 | `name` | `str` | Yes | Unique name within the pipeline + branch |
 | `provider` | `str` | Yes | Provider identifier (use `WebhookProvider` constants) |
-| `filter_expression` | `str` | Yes | CEL expression returning `bool` — webhook fires only when true |
 | `transform_expression` | `str` | Yes | CEL expression returning `map(string, dyn)` — step name to input map |
-| `idempotency_key_expression` | `str` | No | CEL expression returning `string` for deduplication |
 
 **Available providers:** `github`, `gitlab`, `grafana`, `linear`, `slack`, `stripe`, `generic_hmac_sha1`, `generic_hmac_sha256`
 
