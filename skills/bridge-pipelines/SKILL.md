@@ -205,7 +205,7 @@ pipeline = Pipeline(
 |-------|------|----------|-------------|
 | `branch` | `str` | Yes | The git branch this webhook applies to |
 | `filter` | `str` | Yes | CEL expression returning `bool` — webhook fires only when true |
-| `idempotency_key` | `str` | No | CEL expression returning `string` for deduplication (generic HMAC providers only) |
+| `idempotency_key` | `str` | Conditional | CEL expression returning `string` for deduplication. Required for generic providers, forbidden for named providers. |
 | `name` | `str` | Yes | Unique name within the pipeline + branch |
 | `provider` | `str` | Yes | Provider identifier (use `WebhookProvider` constants) |
 | `transform` | `str` | Yes | CEL expression returning `map(string, dyn)` — step name to input map |
