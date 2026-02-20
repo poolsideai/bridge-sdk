@@ -84,6 +84,10 @@ class WebhookProvider(str):
     """Supported webhook provider identifiers.
 
     Each provider has its own signature verification scheme and header conventions.
+
+    Generic providers (``generic_*``) require an ``idempotency_key`` CEL
+    expression that can reference ``headers`` and ``payload`` from the
+    incoming webhook request.
     """
 
     GITHUB = "github"
@@ -107,9 +111,8 @@ class Webhook(BaseModel):
         branch: The git branch this webhook applies to.
         filter: CEL expression evaluated against the payload and headers.
             Must return bool. The webhook triggers only when this evaluates to true.
-        idempotency_key: Optional CEL expression that extracts a deduplication key
-            from the payload. Must return string. Only valid when provider is a
-            generic HMAC type.
+        idempotency_key: CEL expression that extracts a deduplication key from the
+            payload. Must return string. Required when provider is a generic type.
         name: Unique name for this webhook within the pipeline + branch.
         provider: The webhook provider (determines signature verification).
         transform: CEL expression that transforms the payload into step inputs.
@@ -140,8 +143,8 @@ class Webhook(BaseModel):
     """CEL expression that determines whether this webhook should fire. Must return bool."""
 
     idempotency_key: Optional[str] = None
-    """Optional CEL expression to extract a deduplication key. Must return string.
-    Only valid when provider is a generic HMAC type."""
+    """CEL expression to extract a deduplication key. Must return string.
+    Required when provider is a generic type."""
 
     name: str
     """Unique name for this webhook within the pipeline + branch."""
@@ -154,16 +157,16 @@ class Webhook(BaseModel):
 
     @model_validator(mode="after")
     def _validate_idempotency_key(self) -> "Webhook":
-        generic_providers = {
-            WebhookProvider.GENERIC_HMAC_SHA1,
-            WebhookProvider.GENERIC_HMAC_SHA256,
-        }
-        if self.idempotency_key is not None and self.provider not in generic_providers:
+        is_generic = self.provider.startswith("generic_")
+        if self.idempotency_key is not None and not is_generic:
             raise ValueError(
-                "idempotency_key is only valid when provider is "
-                f"'{WebhookProvider.GENERIC_HMAC_SHA1}' or "
-                f"'{WebhookProvider.GENERIC_HMAC_SHA256}', "
+                f"idempotency_key is only valid for generic providers, "
                 f"got '{self.provider}'"
+            )
+        if self.idempotency_key is None and is_generic:
+            raise ValueError(
+                f"idempotency_key is required for generic provider "
+                f"'{self.provider}'"
             )
         return self
 

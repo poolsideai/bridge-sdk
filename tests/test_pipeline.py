@@ -709,6 +709,17 @@ class TestWebhookModel:
                 transform='{"review_step": {"pr_number": payload.pull_request.number}}',
             )
 
+    def test_webhook_idempotency_key_required_for_generic_provider(self):
+        """Test that idempotency_key is required for generic providers."""
+        with pytest.raises(ValueError, match="idempotency_key is required"):
+            Webhook(
+                branch="main",
+                filter="true",
+                name="missing-key-hook",
+                provider=WebhookProvider.GENERIC_HMAC_SHA256,
+                transform='{"ingest_step": {"data": payload.body}}',
+            )
+
     def test_webhook_serialization(self):
         """Test Webhook model serialization round-trip."""
         wh = Webhook(
