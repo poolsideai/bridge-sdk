@@ -112,7 +112,8 @@ class Webhook(BaseModel):
         filter: CEL expression evaluated against the payload and headers.
             Must return bool. The webhook triggers only when this evaluates to true.
         idempotency_key: CEL expression that extracts a deduplication key from the
-            payload. Must return string. Required when provider is a generic type.
+            payload. Must return string. Required for generic providers, forbidden
+            for named providers.
         name: Unique name for this webhook within the pipeline + branch.
         provider: The webhook provider (determines signature verification).
         transform: CEL expression that transforms the payload into step inputs.
@@ -144,7 +145,7 @@ class Webhook(BaseModel):
 
     idempotency_key: Optional[str] = None
     """CEL expression to extract a deduplication key. Must return string.
-    Required when provider is a generic type."""
+    Required for generic providers, forbidden for named providers."""
 
     name: str
     """Unique name for this webhook within the pipeline + branch."""
