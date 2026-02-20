@@ -186,15 +186,14 @@ pipeline = Pipeline(
             filter='payload.type == "Issue" && payload.action == "update"',
             name="linear-issues",
             provider=WebhookProvider.LINEAR,
-            transform='{"triage_step": {"issue": payload.data}}',
+            transform='{"triage_step": {"issue_id": payload.data.id, "title": payload.data.title}}',
         ),
         Webhook(
             branch="main",
             filter='payload.ref == "refs/heads/main"',
-            idempotency_key="headers.X-GitHub-Delivery",
             name="github-push",
             provider=WebhookProvider.GITHUB,
-            transform='{"index_step": payload}',
+            transform='{"index_step": {"repo": payload.repository.full_name, "commit_sha": payload.head_commit.id}}',
         ),
     ],
 )

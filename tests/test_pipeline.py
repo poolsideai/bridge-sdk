@@ -676,13 +676,13 @@ class TestWebhookModel:
             filter="true",
             name="my-hook",
             provider=WebhookProvider.LINEAR,
-            transform=".",
+            transform='{"triage_step": {"issue_url": payload.data.url}}',
         )
         assert wh.branch == "main"
         assert wh.name == "my-hook"
         assert wh.provider == "linear"
         assert wh.filter == "true"
-        assert wh.transform == "."
+        assert wh.transform == '{"triage_step": {"issue_url": payload.data.url}}'
         assert wh.idempotency_key is None
 
     def test_webhook_with_idempotency_key(self):
@@ -693,7 +693,7 @@ class TestWebhookModel:
             idempotency_key="payload.delivery_id",
             name="dedup-hook",
             provider=WebhookProvider.GENERIC_HMAC_SHA256,
-            transform='{"step": payload}',
+            transform='{"ingest_step": {"event_type": payload.action, "data": payload.body}}',
         )
         assert wh.idempotency_key == "payload.delivery_id"
 
@@ -706,7 +706,7 @@ class TestWebhookModel:
                 idempotency_key="payload.delivery_id",
                 name="bad-hook",
                 provider=WebhookProvider.GITHUB,
-                transform='{"step": payload}',
+                transform='{"review_step": {"pr_number": payload.pull_request.number}}',
             )
 
     def test_webhook_serialization(self):
@@ -716,7 +716,7 @@ class TestWebhookModel:
             filter='payload.type == "invoice.paid"',
             name="serial-hook",
             provider=WebhookProvider.STRIPE,
-            transform='{"billing_step": payload.data.object}',
+            transform='{"billing_step": {"invoice_id": payload.data.object.id, "amount": payload.data.object.amount_paid}}',
         )
         dumped = wh.model_dump()
         assert dumped["name"] == "serial-hook"
@@ -749,7 +749,7 @@ class TestPipelineWebhooks:
                 filter='payload.ref == "refs/heads/main"',
                 name="on-push",
                 provider=WebhookProvider.GITHUB,
-                transform='{"index_step": payload}',
+                transform='{"index_step": {"repo": payload.repository.full_name, "commit_sha": payload.head_commit.id}}',
             ),
         ]
         pipeline = Pipeline(name="webhook_pipeline", webhooks=webhooks)
@@ -770,7 +770,7 @@ class TestPipelineWebhooks:
                 filter="true",
                 name="hook-a",
                 provider=WebhookProvider.LINEAR,
-                transform=".",
+                transform='{"triage_step": {"issue_id": payload.data.id}}',
             ),
         ]
         Pipeline(name="reg_webhook_pipeline", webhooks=webhooks)
@@ -787,14 +787,14 @@ class TestPipelineWebhooks:
                 filter='payload.type == "Issue"',
                 name="linear-hook",
                 provider=WebhookProvider.LINEAR,
-                transform='{"triage": payload.data}',
+                transform='{"triage_step": {"issue_id": payload.data.id, "title": payload.data.title}}',
             ),
             Webhook(
                 branch="main",
                 filter='payload.action == "opened"',
                 name="github-hook",
                 provider=WebhookProvider.GITHUB,
-                transform='{"review": payload.pull_request}',
+                transform='{"review_step": {"pr_number": payload.pull_request.number, "head_sha": payload.pull_request.head.sha}}',
             ),
         ]
         pipeline = Pipeline(name="multi_hook_pipeline", webhooks=webhooks)
@@ -809,7 +809,7 @@ class TestPipelineWebhooks:
                 idempotency_key="payload.event_id",
                 name="data-hook",
                 provider=WebhookProvider.GENERIC_HMAC_SHA256,
-                transform='{"chat_step": payload}',
+                transform='{"chat_step": {"channel": payload.channel, "text": payload.text}}',
             ),
         ]
         data = PipelineData(
@@ -840,14 +840,14 @@ class TestPipelineWebhooks:
                 filter='payload.state == "alerting"',
                 name="dsl-hook",
                 provider=WebhookProvider.GRAFANA,
-                transform='{"alert_step": payload}',
+                transform='{"alert_step": {"alertname": payload.alerts[0].labels.alertname, "severity": payload.alerts[0].labels.severity}}',
             ),
         ]
         pipeline = Pipeline(name="dsl_webhook_pipeline", webhooks=webhooks)
 
         @pipeline.step
-        def alert_step() -> str:
-            return "alerted"
+        def alert_step(alertname: str, severity: str) -> str:
+            return f"alerted: {alertname} ({severity})"
 
         pipelines_dict = {
             "dsl_webhook_pipeline": PipelineData(
@@ -882,7 +882,7 @@ class TestPipelineWebhooks:
                 filter="true",
                 name="repr-hook",
                 provider=WebhookProvider.LINEAR,
-                transform=".",
+                transform='{"process_step": {"issue_url": payload.data.url}}',
             ),
         ]
         pipeline = Pipeline(name="repr_webhook_test", webhooks=webhooks)
