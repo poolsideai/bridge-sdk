@@ -183,18 +183,18 @@ pipeline = Pipeline(
     webhooks=[
         Webhook(
             branch="main",
-            filter_expression='payload.type == "Issue" && payload.action == "update"',
+            filter='payload.type == "Issue" && payload.action == "update"',
             name="linear-issues",
             provider=WebhookProvider.LINEAR,
-            transform_expression='{"triage_step": {"issue": payload.data}}',
+            transform='{"triage_step": {"issue": payload.data}}',
         ),
         Webhook(
             branch="main",
-            filter_expression='payload.ref == "refs/heads/main"',
-            idempotency_key_expression="headers.X-GitHub-Delivery",
+            filter='payload.ref == "refs/heads/main"',
+            idempotency_key="headers.X-GitHub-Delivery",
             name="github-push",
             provider=WebhookProvider.GITHUB,
-            transform_expression='{"index_step": payload}',
+            transform='{"index_step": payload}',
         ),
     ],
 )
@@ -205,11 +205,11 @@ pipeline = Pipeline(
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `branch` | `str` | Yes | The git branch this webhook applies to |
-| `filter_expression` | `str` | Yes | CEL expression returning `bool` — webhook fires only when true |
-| `idempotency_key_expression` | `str` | No | CEL expression returning `string` for deduplication |
+| `filter` | `str` | Yes | CEL expression returning `bool` — webhook fires only when true |
+| `idempotency_key` | `str` | No | CEL expression returning `string` for deduplication (generic HMAC providers only) |
 | `name` | `str` | Yes | Unique name within the pipeline + branch |
 | `provider` | `str` | Yes | Provider identifier (use `WebhookProvider` constants) |
-| `transform_expression` | `str` | Yes | CEL expression returning `map(string, dyn)` — step name to input map |
+| `transform` | `str` | Yes | CEL expression returning `map(string, dyn)` — step name to input map |
 
 **Available providers:** `github`, `gitlab`, `grafana`, `linear`, `slack`, `stripe`, `generic_hmac_sha1`, `generic_hmac_sha256`
 

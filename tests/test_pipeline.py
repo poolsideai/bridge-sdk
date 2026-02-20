@@ -673,43 +673,55 @@ class TestWebhookModel:
         """Test Webhook with required fields only."""
         wh = Webhook(
             branch="main",
-            filter_expression="true",
+            filter="true",
             name="my-hook",
             provider=WebhookProvider.LINEAR,
-            transform_expression=".",
+            transform=".",
         )
         assert wh.branch == "main"
         assert wh.name == "my-hook"
         assert wh.provider == "linear"
-        assert wh.filter_expression == "true"
-        assert wh.transform_expression == "."
-        assert wh.idempotency_key_expression is None
+        assert wh.filter == "true"
+        assert wh.transform == "."
+        assert wh.idempotency_key is None
 
     def test_webhook_with_idempotency_key(self):
-        """Test Webhook with optional idempotency_key_expression."""
+        """Test Webhook with optional idempotency_key."""
         wh = Webhook(
             branch="main",
-            filter_expression='payload.action == "opened"',
-            idempotency_key_expression="payload.delivery_id",
+            filter='payload.action == "opened"',
+            idempotency_key="payload.delivery_id",
             name="dedup-hook",
-            provider=WebhookProvider.GITHUB,
-            transform_expression='{"step": payload}',
+            provider=WebhookProvider.GENERIC_HMAC_SHA256,
+            transform='{"step": payload}',
         )
-        assert wh.idempotency_key_expression == "payload.delivery_id"
+        assert wh.idempotency_key == "payload.delivery_id"
+
+    def test_webhook_idempotency_key_rejected_for_named_provider(self):
+        """Test that idempotency_key is rejected for non-generic providers."""
+        with pytest.raises(ValueError, match="idempotency_key is only valid"):
+            Webhook(
+                branch="main",
+                filter='payload.action == "opened"',
+                idempotency_key="payload.delivery_id",
+                name="bad-hook",
+                provider=WebhookProvider.GITHUB,
+                transform='{"step": payload}',
+            )
 
     def test_webhook_serialization(self):
         """Test Webhook model serialization round-trip."""
         wh = Webhook(
             branch="main",
-            filter_expression='payload.type == "invoice.paid"',
+            filter='payload.type == "invoice.paid"',
             name="serial-hook",
             provider=WebhookProvider.STRIPE,
-            transform_expression='{"billing_step": payload.data.object}',
+            transform='{"billing_step": payload.data.object}',
         )
         dumped = wh.model_dump()
         assert dumped["name"] == "serial-hook"
         assert dumped["provider"] == "stripe"
-        assert dumped["idempotency_key_expression"] is None
+        assert dumped["idempotency_key"] is None
 
         parsed = json.loads(json.dumps(dumped))
         assert parsed["name"] == "serial-hook"
@@ -734,10 +746,10 @@ class TestPipelineWebhooks:
         webhooks = [
             Webhook(
                 branch="main",
-                filter_expression='payload.ref == "refs/heads/main"',
+                filter='payload.ref == "refs/heads/main"',
                 name="on-push",
                 provider=WebhookProvider.GITHUB,
-                transform_expression='{"index_step": payload}',
+                transform='{"index_step": payload}',
             ),
         ]
         pipeline = Pipeline(name="webhook_pipeline", webhooks=webhooks)
@@ -755,10 +767,10 @@ class TestPipelineWebhooks:
         webhooks = [
             Webhook(
                 branch="main",
-                filter_expression="true",
+                filter="true",
                 name="hook-a",
                 provider=WebhookProvider.LINEAR,
-                transform_expression=".",
+                transform=".",
             ),
         ]
         Pipeline(name="reg_webhook_pipeline", webhooks=webhooks)
@@ -772,17 +784,17 @@ class TestPipelineWebhooks:
         webhooks = [
             Webhook(
                 branch="main",
-                filter_expression='payload.type == "Issue"',
+                filter='payload.type == "Issue"',
                 name="linear-hook",
                 provider=WebhookProvider.LINEAR,
-                transform_expression='{"triage": payload.data}',
+                transform='{"triage": payload.data}',
             ),
             Webhook(
                 branch="main",
-                filter_expression='payload.action == "opened"',
+                filter='payload.action == "opened"',
                 name="github-hook",
                 provider=WebhookProvider.GITHUB,
-                transform_expression='{"review": payload.pull_request}',
+                transform='{"review": payload.pull_request}',
             ),
         ]
         pipeline = Pipeline(name="multi_hook_pipeline", webhooks=webhooks)
@@ -793,11 +805,11 @@ class TestPipelineWebhooks:
         webhooks = [
             Webhook(
                 branch="main",
-                filter_expression='payload.type == "message"',
-                idempotency_key_expression="payload.event_id",
+                filter='payload.type == "message"',
+                idempotency_key="payload.event_id",
                 name="data-hook",
-                provider=WebhookProvider.SLACK,
-                transform_expression='{"chat_step": payload}',
+                provider=WebhookProvider.GENERIC_HMAC_SHA256,
+                transform='{"chat_step": payload}',
             ),
         ]
         data = PipelineData(
@@ -809,8 +821,8 @@ class TestPipelineWebhooks:
         assert "webhooks" in dumped
         assert len(dumped["webhooks"]) == 1
         assert dumped["webhooks"][0]["name"] == "data-hook"
-        assert dumped["webhooks"][0]["provider"] == "slack"
-        assert dumped["webhooks"][0]["idempotency_key_expression"] == "payload.event_id"
+        assert dumped["webhooks"][0]["provider"] == "generic_hmac_sha256"
+        assert dumped["webhooks"][0]["idempotency_key"] == "payload.event_id"
 
     def test_pipeline_data_without_webhooks(self):
         """Test PipelineData with no webhooks omits the field when exclude_none."""
@@ -825,10 +837,10 @@ class TestPipelineWebhooks:
         webhooks = [
             Webhook(
                 branch="main",
-                filter_expression='payload.state == "alerting"',
+                filter='payload.state == "alerting"',
                 name="dsl-hook",
                 provider=WebhookProvider.GRAFANA,
-                transform_expression='{"alert_step": payload}',
+                transform='{"alert_step": payload}',
             ),
         ]
         pipeline = Pipeline(name="dsl_webhook_pipeline", webhooks=webhooks)
@@ -867,10 +879,10 @@ class TestPipelineWebhooks:
         webhooks = [
             Webhook(
                 branch="main",
-                filter_expression="true",
+                filter="true",
                 name="repr-hook",
                 provider=WebhookProvider.LINEAR,
-                transform_expression=".",
+                transform=".",
             ),
         ]
         pipeline = Pipeline(name="repr_webhook_test", webhooks=webhooks)

@@ -28,7 +28,7 @@ Use whichever you prefer:
 
 from typing import Annotated, Literal, Optional, Union
 
-from pydantic import BaseModel, Field, TypeAdapter
+from pydantic import BaseModel, Field, TypeAdapter, model_validator
 
 from bridge_sdk.proto import bridge_sidecar_pb2
 
@@ -105,14 +105,15 @@ class Webhook(BaseModel):
 
     Attributes:
         branch: The git branch this webhook applies to.
-        filter_expression: CEL expression evaluated against the payload and headers.
+        filter: CEL expression evaluated against the payload and headers.
             Must return bool. The webhook triggers only when this evaluates to true.
-        idempotency_key_expression: Optional CEL expression that extracts a
-            deduplication key from the payload. Must return string.
+        idempotency_key: Optional CEL expression that extracts a deduplication key
+            from the payload. Must return string. Only valid when provider is a
+            generic HMAC type.
         name: Unique name for this webhook within the pipeline + branch.
         provider: The webhook provider (determines signature verification).
-        transform_expression: CEL expression that transforms the payload into
-            step inputs. Must return map(string, dyn) keyed by step name.
+        transform: CEL expression that transforms the payload into step inputs.
+            Must return map(string, dyn) keyed by step name.
 
     Example::
 
@@ -123,10 +124,10 @@ class Webhook(BaseModel):
             webhooks=[
                 Webhook(
                     branch="main",
-                    filter_expression='payload.type == "Issue" && payload.action == "update"',
+                    filter='payload.type == "Issue" && payload.action == "update"',
                     name="linear-issues",
                     provider=WebhookProvider.LINEAR,
-                    transform_expression='{"triage_step": {"issue": payload.data}}',
+                    transform='{"triage_step": {"issue": payload.data}}',
                 ),
             ],
         )
@@ -135,11 +136,12 @@ class Webhook(BaseModel):
     branch: str
     """The git branch this webhook applies to."""
 
-    filter_expression: str
+    filter: str
     """CEL expression that determines whether this webhook should fire. Must return bool."""
 
-    idempotency_key_expression: Optional[str] = None
-    """Optional CEL expression to extract a deduplication key. Must return string."""
+    idempotency_key: Optional[str] = None
+    """Optional CEL expression to extract a deduplication key. Must return string.
+    Only valid when provider is a generic HMAC type."""
 
     name: str
     """Unique name for this webhook within the pipeline + branch."""
@@ -147,8 +149,23 @@ class Webhook(BaseModel):
     provider: str
     """The webhook provider identifier (e.g. 'github', 'linear')."""
 
-    transform_expression: str
+    transform: str
     """CEL expression that transforms the payload into step inputs. Must return map(string, dyn)."""
+
+    @model_validator(mode="after")
+    def _validate_idempotency_key(self) -> "Webhook":
+        generic_providers = {
+            WebhookProvider.GENERIC_HMAC_SHA1,
+            WebhookProvider.GENERIC_HMAC_SHA256,
+        }
+        if self.idempotency_key is not None and self.provider not in generic_providers:
+            raise ValueError(
+                "idempotency_key is only valid when provider is "
+                f"'{WebhookProvider.GENERIC_HMAC_SHA1}' or "
+                f"'{WebhookProvider.GENERIC_HMAC_SHA256}', "
+                f"got '{self.provider}'"
+            )
+        return self
 
 
 class ImageURLContent(BaseModel):
