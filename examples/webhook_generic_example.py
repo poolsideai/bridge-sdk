@@ -29,9 +29,10 @@ pipeline = Pipeline(
     name="alerting",
     description="Process incoming alerts from a custom monitoring service",
     webhooks=[
-        # branch selects which git branch's pipeline code to run when the
-        # webhook fires — "staging" here means alerts are processed by the
-        # staging version of handle_alert, not the production one.
+        # branch determines where this webhook is indexed from and which
+        # version of the pipeline code runs — "staging" here means the
+        # webhook is discovered when staging is indexed and events run
+        # the staging version of handle_alert.
         Webhook(
             branch="staging",
             filter='payload.status == "firing" && payload.severity == "critical"',

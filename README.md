@@ -306,9 +306,9 @@ pipeline = Pipeline(
     name="on_issue_create",
     webhooks=[
         Webhook(
-            # branch selects which git branch's pipeline code runs when the
-            # webhook fires — use "main" for mainline, or a release branch
-            # like "production" to pin to a stable version of your steps.
+            # branch determines where this webhook is indexed from and which
+            # version of the pipeline code runs when it fires. The webhook
+            # won't exist until this branch is indexed.
             branch="main",
             filter='payload.type == "Issue" && payload.action == "create"',
             name="linear-issues",
@@ -321,7 +321,7 @@ pipeline = Pipeline(
 
 Each webhook uses [CEL](https://cel.dev/) expressions that receive `payload` (the parsed JSON body) and `headers` (HTTP headers as `map(string, string)`):
 
-- **`branch`** — The git branch whose pipeline code runs when the webhook fires. This lets you run different versions of the same pipeline (e.g. `"main"` for development, `"production"` for stable).
+- **`branch`** — The git branch this webhook is indexed from and whose pipeline code runs when it fires. The webhook only exists after that branch is indexed, and incoming events execute the pipeline version from that branch. This lets you run different versions of the same pipeline (e.g. `"main"` for development, `"production"` for stable).
 - **`filter`** — Returns `bool`. The webhook fires only when this evaluates to `true`.
 - **`transform`** — Returns `map(string, dyn)` keyed by step name. Maps webhook payload fields into step inputs.
 - **`idempotency_key`** (conditional) — Returns `string`. Required for generic providers (`generic_hmac_sha1`, `generic_hmac_sha256`), forbidden for named providers.

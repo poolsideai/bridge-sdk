@@ -108,7 +108,8 @@ class Webhook(BaseModel):
     the webhook via the API or UI.
 
     Attributes:
-        branch: The git branch this webhook applies to.
+        branch: The git branch this webhook is indexed from and whose pipeline
+            code runs when it fires.
         filter: CEL expression evaluated against the payload and headers.
             Must return bool. The webhook triggers only when this evaluates to true.
         idempotency_key: CEL expression that extracts a deduplication key from the
@@ -138,7 +139,7 @@ class Webhook(BaseModel):
     """
 
     branch: str
-    """The git branch this webhook applies to."""
+    """The git branch this webhook is indexed from and whose pipeline code runs when it fires."""
 
     filter: str
     """CEL expression that determines whether this webhook should fire. Must return bool."""

@@ -181,9 +181,9 @@ from bridge_sdk import Pipeline, Webhook, WebhookProvider
 pipeline = Pipeline(
     name="on_issue_update",
     webhooks=[
-        # branch controls which git branch's pipeline code runs when the
-        # webhook fires — use different branches to run stable vs. development
-        # versions of the same pipeline.
+        # branch determines where this webhook is indexed from and which
+        # version of the pipeline code runs when it fires. The webhook won't
+        # exist until this branch is indexed.
         Webhook(
             branch="main",
             filter='payload.type == "Issue" && payload.action == "update"',
@@ -206,7 +206,7 @@ pipeline = Pipeline(
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `branch` | `str` | Yes | The git branch whose pipeline code runs when the webhook fires |
+| `branch` | `str` | Yes | The git branch this webhook is indexed from and whose pipeline code runs when it fires |
 | `filter` | `str` | Yes | CEL expression returning `bool` — webhook fires only when true |
 | `idempotency_key` | `str` | Conditional | CEL expression returning `string` for deduplication. Required for generic providers, forbidden for named providers. |
 | `name` | `str` | Yes | Unique name within the pipeline + branch |

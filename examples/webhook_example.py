@@ -50,8 +50,9 @@ pipeline = Pipeline(
     description="Triage incoming issues from Linear and GitHub",
     webhooks=[
         # Linear: trigger when an issue is created with the "autofix" label.
-        # branch determines which version of the pipeline code runs — here
-        # we use "main" so webhooks fire against the mainline pipeline.
+        # branch determines where this webhook is indexed from and which
+        # version of the pipeline code runs — "main" here means the webhook
+        # is discovered when main is indexed and events run mainline code.
         Webhook(
             branch="main",
             filter=(
@@ -66,9 +67,9 @@ pipeline = Pipeline(
             ),
         ),
         # GitHub: trigger on pull request opened against main.
-        # Using a different branch ("production") means this webhook uses
-        # the pipeline code from the production branch, which is useful for
-        # deploying stable vs. development versions of the same pipeline.
+        # Using "production" means this webhook is only indexed from the
+        # production branch and events run that branch's pipeline code —
+        # useful for pinning to a stable version of your steps.
         Webhook(
             branch="production",
             filter=(
