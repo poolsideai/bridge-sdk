@@ -295,6 +295,50 @@ All fields are optional:
 | `storage_request` | Storage request | `"50Gi"` |
 | `storage_limit` | Storage limit | `"100Gi"` |
 
+### Webhooks
+
+Pipelines can be triggered by external webhook events. Webhooks are declared at pipeline creation time, discovered during indexing, and start disabled until configured with a signing secret via the API or UI.
+
+```python
+from bridge_sdk import Pipeline, Webhook, WebhookProvider
+
+pipeline = Pipeline(
+    name="on_issue_create",
+    webhooks=[
+        Webhook(
+            branch="main",
+            filter='payload.type == "Issue" && payload.action == "create"',
+            name="linear-issues",
+            provider=WebhookProvider.LINEAR,
+            transform='{"process_issue": {"issue_id": payload.data.id, "title": payload.data.title}}',
+        ),
+    ],
+)
+```
+
+Each webhook uses [CEL](https://cel.dev/) expressions that receive `payload` (the parsed JSON body) and `headers` (HTTP headers as `map(string, string)`):
+
+- **`filter`** — Returns `bool`. The webhook fires only when this evaluates to `true`.
+- **`transform`** — Returns `map(string, dyn)` keyed by step name. Maps webhook payload fields into step inputs.
+- **`idempotency_key`** (conditional) — Returns `string`. Required for generic providers (`generic_hmac_sha1`, `generic_hmac_sha256`), forbidden for named providers.
+
+**Available providers:** `github`, `gitlab`, `grafana`, `linear`, `slack`, `stripe`, `generic_hmac_sha1`, `generic_hmac_sha256`
+
+Generic providers work with any service that signs requests with an HMAC and require an `idempotency_key` for deduplication:
+
+```python
+Webhook(
+    branch="main",
+    filter='payload.status == "firing"',
+    idempotency_key='payload.alert_id + "/" + payload.timestamp',
+    name="custom-alerts",
+    provider=WebhookProvider.GENERIC_HMAC_SHA256,
+    transform='{"handle_alert": {"alert_id": payload.alert_id, "message": payload.message}}',
+)
+```
+
+See `examples/webhook_example.py` and `examples/webhook_generic_example.py` for complete working examples.
+
 ### Async Steps
 
 ```python
@@ -428,6 +472,8 @@ from bridge_sdk import (
     StepFunction,      # Type for decorated step functions
     StepData,          # Pydantic model for step metadata
     SandboxDefinition, # Optional compute resources for a step's sandbox
+    Webhook,           # Webhook trigger definition
+    WebhookProvider,   # Provider constants (GITHUB, LINEAR, etc.)
     STEP_REGISTRY,     # Global registry of discovered steps
     get_dsl_output,    # Generate DSL from registry
 )

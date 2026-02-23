@@ -214,6 +214,8 @@ pipeline = Pipeline(
 
 CEL expressions receive `payload` (the parsed JSON body) and `headers` (HTTP headers as `map(string, string)`).
 
+Example files: `examples/webhook_example.py` (named providers), `examples/webhook_generic_example.py` (generic HMAC provider with idempotency key).
+
 ## Agent Integration
 
 Steps can launch AI agents via the Bridge sidecar gRPC service. See [references/agents.md](references/agents.md) for the full agent integration guide.
