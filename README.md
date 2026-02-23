@@ -306,6 +306,9 @@ pipeline = Pipeline(
     name="on_issue_create",
     webhooks=[
         Webhook(
+            # branch selects which git branch's pipeline code runs when the
+            # webhook fires — use "main" for mainline, or a release branch
+            # like "production" to pin to a stable version of your steps.
             branch="main",
             filter='payload.type == "Issue" && payload.action == "create"',
             name="linear-issues",
@@ -318,6 +321,7 @@ pipeline = Pipeline(
 
 Each webhook uses [CEL](https://cel.dev/) expressions that receive `payload` (the parsed JSON body) and `headers` (HTTP headers as `map(string, string)`):
 
+- **`branch`** — The git branch whose pipeline code runs when the webhook fires. This lets you run different versions of the same pipeline (e.g. `"main"` for development, `"production"` for stable).
 - **`filter`** — Returns `bool`. The webhook fires only when this evaluates to `true`.
 - **`transform`** — Returns `map(string, dyn)` keyed by step name. Maps webhook payload fields into step inputs.
 - **`idempotency_key`** (conditional) — Returns `string`. Required for generic providers (`generic_hmac_sha1`, `generic_hmac_sha256`), forbidden for named providers.
@@ -328,7 +332,7 @@ Generic providers work with any service that signs requests with an HMAC and req
 
 ```python
 Webhook(
-    branch="main",
+    branch="staging",
     filter='payload.status == "firing"',
     idempotency_key='payload.alert_id + "/" + payload.timestamp',
     name="custom-alerts",

@@ -181,6 +181,9 @@ from bridge_sdk import Pipeline, Webhook, WebhookProvider
 pipeline = Pipeline(
     name="on_issue_update",
     webhooks=[
+        # branch controls which git branch's pipeline code runs when the
+        # webhook fires — use different branches to run stable vs. development
+        # versions of the same pipeline.
         Webhook(
             branch="main",
             filter='payload.type == "Issue" && payload.action == "update"',
@@ -189,7 +192,7 @@ pipeline = Pipeline(
             transform='{"triage_step": {"issue_id": payload.data.id, "title": payload.data.title}}',
         ),
         Webhook(
-            branch="main",
+            branch="production",
             filter='payload.ref == "refs/heads/main"',
             name="github-push",
             provider=WebhookProvider.GITHUB,
@@ -203,7 +206,7 @@ pipeline = Pipeline(
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `branch` | `str` | Yes | The git branch this webhook applies to |
+| `branch` | `str` | Yes | The git branch whose pipeline code runs when the webhook fires |
 | `filter` | `str` | Yes | CEL expression returning `bool` — webhook fires only when true |
 | `idempotency_key` | `str` | Conditional | CEL expression returning `string` for deduplication. Required for generic providers, forbidden for named providers. |
 | `name` | `str` | Yes | Unique name within the pipeline + branch |

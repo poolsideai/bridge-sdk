@@ -29,8 +29,11 @@ pipeline = Pipeline(
     name="alerting",
     description="Process incoming alerts from a custom monitoring service",
     webhooks=[
+        # branch selects which git branch's pipeline code to run when the
+        # webhook fires — "staging" here means alerts are processed by the
+        # staging version of handle_alert, not the production one.
         Webhook(
-            branch="main",
+            branch="staging",
             filter='payload.status == "firing" && payload.severity == "critical"',
             idempotency_key='payload.alert_id + "/" + payload.timestamp',
             name="custom-alerts",
