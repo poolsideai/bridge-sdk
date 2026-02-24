@@ -235,6 +235,7 @@ def cmd_config_get_dsl(args):
     pipelines_dict = {
         pname: PipelineData(
             name=p.name, rid=p.rid, description=p.description,
+            webhooks=p.webhooks or None,
         ).model_dump()
         for pname, p in pipelines.items()
     }

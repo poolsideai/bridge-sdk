@@ -28,7 +28,7 @@ Use whichever you prefer:
 
 from typing import Annotated, Literal, Optional, Union
 
-from pydantic import BaseModel, Field, TypeAdapter
+from pydantic import BaseModel, Field, TypeAdapter, model_validator
 
 from bridge_sdk.proto import bridge_sidecar_pb2
 
@@ -78,6 +78,99 @@ class SandboxDefinition(BaseModel):
 
     storage_limit: Optional[str] = None
     """Storage limit in Kubernetes format (e.g., '50Gi')."""
+
+
+class WebhookProvider(str):
+    """Supported webhook provider identifiers.
+
+    Each provider has its own signature verification scheme and header conventions.
+
+    Generic providers (``generic_*``) require an ``idempotency_key`` CEL
+    expression that can reference ``headers`` and ``payload`` from the
+    incoming webhook request.
+    """
+
+    GITHUB = "github"
+    GITLAB = "gitlab"
+    GRAFANA = "grafana"
+    LINEAR = "linear"
+    SLACK = "slack"
+    STRIPE = "stripe"
+    GENERIC_HMAC_SHA1 = "generic_hmac_sha1"
+    GENERIC_HMAC_SHA256 = "generic_hmac_sha256"
+
+
+class Webhook(BaseModel):
+    """Defines a webhook trigger for a pipeline.
+
+    Webhooks are declared in pipeline code and discovered during indexing.
+    They start disabled — the user configures a signing secret and enables
+    the webhook via the API or UI.
+
+    Attributes:
+        branch: The git branch this webhook is indexed from and whose pipeline
+            code runs when it fires.
+        filter: CEL expression evaluated against the payload and headers.
+            Must return bool. The webhook triggers only when this evaluates to true.
+        idempotency_key: CEL expression that extracts a deduplication key from the
+            payload. Must return string. Required for generic providers, forbidden
+            for named providers.
+        name: Unique name for this webhook within the pipeline + branch.
+        provider: The webhook provider (determines signature verification).
+        transform: CEL expression that transforms the payload into step inputs.
+            Must return map(string, dyn) keyed by step name.
+
+    Example::
+
+        from bridge_sdk import Pipeline, Webhook, WebhookProvider
+
+        pipeline = Pipeline(
+            name="on_issue_update",
+            webhooks=[
+                Webhook(
+                    branch="main",
+                    filter='payload.type == "Issue" && payload.action == "update"',
+                    name="linear-issues",
+                    provider=WebhookProvider.LINEAR,
+                    transform='{"triage_step": {"issue": payload.data}}',
+                ),
+            ],
+        )
+    """
+
+    branch: str
+    """The git branch this webhook is indexed from and whose pipeline code runs when it fires."""
+
+    filter: str
+    """CEL expression that determines whether this webhook should fire. Must return bool."""
+
+    idempotency_key: Optional[str] = None
+    """CEL expression to extract a deduplication key. Must return string.
+    Required for generic providers, forbidden for named providers."""
+
+    name: str
+    """Unique name for this webhook within the pipeline + branch."""
+
+    provider: str
+    """The webhook provider identifier (e.g. 'github', 'linear')."""
+
+    transform: str
+    """CEL expression that transforms the payload into step inputs. Must return map(string, dyn)."""
+
+    @model_validator(mode="after")
+    def _validate_idempotency_key(self) -> "Webhook":
+        is_generic = self.provider.startswith("generic_")
+        if self.idempotency_key is not None and not is_generic:
+            raise ValueError(
+                f"idempotency_key is only valid for generic providers, "
+                f"got '{self.provider}'"
+            )
+        if self.idempotency_key is None and is_generic:
+            raise ValueError(
+                f"idempotency_key is required for generic provider "
+                f"'{self.provider}'"
+            )
+        return self
 
 
 class ImageURLContent(BaseModel):

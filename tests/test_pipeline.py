@@ -27,7 +27,9 @@ from bridge_sdk import (
     step,
     step_result,
     STEP_REGISTRY,
-    SandboxDefinition
+    SandboxDefinition,
+    Webhook,
+    WebhookProvider,
 )
 from bridge_sdk.cli import (
     discover_steps_and_pipelines,
@@ -657,6 +659,246 @@ class TestPipelineStepSandboxDefinition:
         assert step_data.sandbox_definition is not None
         assert step_data.sandbox_definition.image == "gpu-image:cuda11"
         assert step_data.sandbox_definition.cpu_request == "4"
+
+
+# =============================================================================
+# Webhook Tests
+# =============================================================================
+
+
+class TestWebhookModel:
+    """Tests for the Webhook Pydantic model."""
+
+    def test_webhook_minimal(self):
+        """Test Webhook with required fields only."""
+        wh = Webhook(
+            branch="main",
+            filter="true",
+            name="my-hook",
+            provider=WebhookProvider.LINEAR,
+            transform='{"triage_step": {"issue_url": payload.data.url}}',
+        )
+        assert wh.branch == "main"
+        assert wh.name == "my-hook"
+        assert wh.provider == "linear"
+        assert wh.filter == "true"
+        assert wh.transform == '{"triage_step": {"issue_url": payload.data.url}}'
+        assert wh.idempotency_key is None
+
+    def test_webhook_with_idempotency_key(self):
+        """Test Webhook with optional idempotency_key."""
+        wh = Webhook(
+            branch="main",
+            filter='payload.action == "opened"',
+            idempotency_key="payload.delivery_id",
+            name="dedup-hook",
+            provider=WebhookProvider.GENERIC_HMAC_SHA256,
+            transform='{"ingest_step": {"event_type": payload.action, "data": payload.body}}',
+        )
+        assert wh.idempotency_key == "payload.delivery_id"
+
+    def test_webhook_idempotency_key_rejected_for_named_provider(self):
+        """Test that idempotency_key is rejected for non-generic providers."""
+        with pytest.raises(ValueError, match="idempotency_key is only valid"):
+            Webhook(
+                branch="main",
+                filter='payload.action == "opened"',
+                idempotency_key="payload.delivery_id",
+                name="bad-hook",
+                provider=WebhookProvider.GITHUB,
+                transform='{"review_step": {"pr_number": payload.pull_request.number}}',
+            )
+
+    def test_webhook_idempotency_key_required_for_generic_provider(self):
+        """Test that idempotency_key is required for generic providers."""
+        with pytest.raises(ValueError, match="idempotency_key is required"):
+            Webhook(
+                branch="main",
+                filter="true",
+                name="missing-key-hook",
+                provider=WebhookProvider.GENERIC_HMAC_SHA256,
+                transform='{"ingest_step": {"data": payload.body}}',
+            )
+
+    def test_webhook_serialization(self):
+        """Test Webhook model serialization round-trip."""
+        wh = Webhook(
+            branch="main",
+            filter='payload.type == "invoice.paid"',
+            name="serial-hook",
+            provider=WebhookProvider.STRIPE,
+            transform='{"billing_step": {"invoice_id": payload.data.object.id, "amount": payload.data.object.amount_paid}}',
+        )
+        dumped = wh.model_dump()
+        assert dumped["name"] == "serial-hook"
+        assert dumped["provider"] == "stripe"
+        assert dumped["idempotency_key"] is None
+
+        parsed = json.loads(json.dumps(dumped))
+        assert parsed["name"] == "serial-hook"
+
+    def test_webhook_provider_values(self):
+        """Test all WebhookProvider constants."""
+        assert WebhookProvider.GITHUB == "github"
+        assert WebhookProvider.GITLAB == "gitlab"
+        assert WebhookProvider.GRAFANA == "grafana"
+        assert WebhookProvider.LINEAR == "linear"
+        assert WebhookProvider.SLACK == "slack"
+        assert WebhookProvider.STRIPE == "stripe"
+        assert WebhookProvider.GENERIC_HMAC_SHA1 == "generic_hmac_sha1"
+        assert WebhookProvider.GENERIC_HMAC_SHA256 == "generic_hmac_sha256"
+
+
+class TestPipelineWebhooks:
+    """Tests for webhooks on Pipeline and PipelineData."""
+
+    def test_pipeline_with_webhooks(self):
+        """Test Pipeline instantiation with webhooks."""
+        webhooks = [
+            Webhook(
+                branch="main",
+                filter='payload.ref == "refs/heads/main"',
+                name="on-push",
+                provider=WebhookProvider.GITHUB,
+                transform='{"index_step": {"repo": payload.repository.full_name, "commit_sha": payload.head_commit.id}}',
+            ),
+        ]
+        pipeline = Pipeline(name="webhook_pipeline", webhooks=webhooks)
+
+        assert len(pipeline.webhooks) == 1
+        assert pipeline.webhooks[0].name == "on-push"
+
+    def test_pipeline_without_webhooks(self):
+        """Test Pipeline defaults to empty webhooks list."""
+        pipeline = Pipeline(name="no_hooks_pipeline")
+        assert pipeline.webhooks == []
+
+    def test_pipeline_webhooks_in_registry(self):
+        """Test that webhooks are preserved in the registry."""
+        webhooks = [
+            Webhook(
+                branch="main",
+                filter="true",
+                name="hook-a",
+                provider=WebhookProvider.LINEAR,
+                transform='{"triage_step": {"issue_id": payload.data.id}}',
+            ),
+        ]
+        Pipeline(name="reg_webhook_pipeline", webhooks=webhooks)
+
+        p = PIPELINE_REGISTRY["reg_webhook_pipeline"]
+        assert len(p.webhooks) == 1
+        assert p.webhooks[0].name == "hook-a"
+
+    def test_pipeline_multiple_webhooks(self):
+        """Test Pipeline with multiple webhooks."""
+        webhooks = [
+            Webhook(
+                branch="main",
+                filter='payload.type == "Issue"',
+                name="linear-hook",
+                provider=WebhookProvider.LINEAR,
+                transform='{"triage_step": {"issue_id": payload.data.id, "title": payload.data.title}}',
+            ),
+            Webhook(
+                branch="main",
+                filter='payload.action == "opened"',
+                name="github-hook",
+                provider=WebhookProvider.GITHUB,
+                transform='{"review_step": {"pr_number": payload.pull_request.number, "head_sha": payload.pull_request.head.sha}}',
+            ),
+        ]
+        pipeline = Pipeline(name="multi_hook_pipeline", webhooks=webhooks)
+        assert len(pipeline.webhooks) == 2
+
+    def test_pipeline_data_with_webhooks(self):
+        """Test PipelineData serialization with webhooks."""
+        webhooks = [
+            Webhook(
+                branch="main",
+                filter='payload.type == "message"',
+                idempotency_key="payload.event_id",
+                name="data-hook",
+                provider=WebhookProvider.GENERIC_HMAC_SHA256,
+                transform='{"chat_step": {"channel": payload.channel, "text": payload.text}}',
+            ),
+        ]
+        data = PipelineData(
+            name="data_webhook_pipeline",
+            webhooks=webhooks,
+        )
+
+        dumped = data.model_dump()
+        assert "webhooks" in dumped
+        assert len(dumped["webhooks"]) == 1
+        assert dumped["webhooks"][0]["name"] == "data-hook"
+        assert dumped["webhooks"][0]["provider"] == "generic_hmac_sha256"
+        assert dumped["webhooks"][0]["idempotency_key"] == "payload.event_id"
+
+    def test_pipeline_data_without_webhooks(self):
+        """Test PipelineData with no webhooks omits the field when exclude_none."""
+        data = PipelineData(name="plain_pipeline")
+        assert data.webhooks is None
+
+        dumped = data.model_dump(exclude_none=True)
+        assert "webhooks" not in dumped
+
+    def test_pipeline_webhooks_in_dsl_output(self):
+        """Test that webhooks appear in the full DSL output structure."""
+        webhooks = [
+            Webhook(
+                branch="main",
+                filter='payload.state == "alerting"',
+                name="dsl-hook",
+                provider=WebhookProvider.GRAFANA,
+                transform='{"alert_step": {"alertname": payload.alerts[0].labels.alertname, "severity": payload.alerts[0].labels.severity}}',
+            ),
+        ]
+        pipeline = Pipeline(name="dsl_webhook_pipeline", webhooks=webhooks)
+
+        @pipeline.step
+        def alert_step(alertname: str, severity: str) -> str:
+            return f"alerted: {alertname} ({severity})"
+
+        pipelines_dict = {
+            "dsl_webhook_pipeline": PipelineData(
+                name=pipeline.name,
+                rid=pipeline.rid,
+                description=pipeline.description,
+                webhooks=pipeline.webhooks or None,
+            ).model_dump()
+        }
+
+        dsl_output = {
+            "steps": {"alert_step": STEP_REGISTRY["alert_step"].step_data.model_dump()},
+            "pipelines": pipelines_dict,
+        }
+
+        # Verify webhooks in pipeline output
+        p_out = dsl_output["pipelines"]["dsl_webhook_pipeline"]
+        assert "webhooks" in p_out
+        assert len(p_out["webhooks"]) == 1
+        assert p_out["webhooks"][0]["name"] == "dsl-hook"
+        assert p_out["webhooks"][0]["provider"] == "grafana"
+
+        # Verify JSON round-trip
+        parsed = json.loads(json.dumps(dsl_output))
+        assert parsed["pipelines"]["dsl_webhook_pipeline"]["webhooks"][0]["name"] == "dsl-hook"
+
+    def test_pipeline_webhooks_in_repr(self):
+        """Test that Pipeline repr includes webhooks."""
+        webhooks = [
+            Webhook(
+                branch="main",
+                filter="true",
+                name="repr-hook",
+                provider=WebhookProvider.LINEAR,
+                transform='{"process_step": {"issue_url": payload.data.url}}',
+            ),
+        ]
+        pipeline = Pipeline(name="repr_webhook_test", webhooks=webhooks)
+        repr_str = repr(pipeline)
+        assert "repr-hook" in repr_str
 
 
 if __name__ == "__main__":

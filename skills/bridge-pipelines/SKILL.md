@@ -171,6 +171,54 @@ def secure_step() -> str:
 
 Keys are credential UUIDs registered in the Bridge UI. Values are the env var names to inject.
 
+### Webhooks
+
+Pipelines can be triggered by external webhook events. Define webhooks in the pipeline code — they are discovered during indexing and start disabled until configured via the UI.
+
+```python
+from bridge_sdk import Pipeline, Webhook, WebhookProvider
+
+pipeline = Pipeline(
+    name="on_issue_update",
+    webhooks=[
+        # branch determines where this webhook is indexed from and which
+        # version of the pipeline code runs when it fires. The webhook won't
+        # exist until this branch is indexed.
+        Webhook(
+            branch="main",
+            filter='payload.type == "Issue" && payload.action == "update"',
+            name="linear-issues",
+            provider=WebhookProvider.LINEAR,
+            transform='{"triage_step": {"issue_id": payload.data.id, "title": payload.data.title}}',
+        ),
+        Webhook(
+            branch="production",
+            filter='payload.ref == "refs/heads/main"',
+            name="github-push",
+            provider=WebhookProvider.GITHUB,
+            transform='{"index_step": {"repo": payload.repository.full_name, "commit_sha": payload.head_commit.id}}',
+        ),
+    ],
+)
+```
+
+**Webhook fields:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `branch` | `str` | Yes | The git branch this webhook is indexed from and whose pipeline code runs when it fires |
+| `filter` | `str` | Yes | CEL expression returning `bool` — webhook fires only when true |
+| `idempotency_key` | `str` | Conditional | CEL expression returning `string` for deduplication. Required for generic providers, forbidden for named providers. |
+| `name` | `str` | Yes | Unique name within the pipeline + branch |
+| `provider` | `str` | Yes | Provider identifier (use `WebhookProvider` constants) |
+| `transform` | `str` | Yes | CEL expression returning `map(string, dyn)` — step name to input map |
+
+**Available providers:** `github`, `gitlab`, `grafana`, `linear`, `slack`, `stripe`, `generic_hmac_sha1`, `generic_hmac_sha256`
+
+CEL expressions receive `payload` (the parsed JSON body) and `headers` (HTTP headers as `map(string, string)`).
+
+Example files: `examples/webhook_example.py` (named providers), `examples/webhook_generic_example.py` (generic HMAC provider with idempotency key).
+
 ## Agent Integration
 
 Steps can launch AI agents via the Bridge sidecar gRPC service. See [references/agents.md](references/agents.md) for the full agent integration guide.

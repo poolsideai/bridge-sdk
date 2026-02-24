@@ -21,7 +21,7 @@ from typing import Any, Callable, Dict, Optional, overload
 from pydantic import BaseModel
 from typing_extensions import ParamSpec, TypeVar
 
-from bridge_sdk.models import SandboxDefinition
+from bridge_sdk.models import SandboxDefinition, Webhook
 from bridge_sdk.step_function import StepFunction, make_step_function
 
 P = ParamSpec("P")
@@ -59,6 +59,7 @@ class Pipeline:
         name: The unique name of the pipeline.
         rid: Optional stable resource identifier (UUID).
         description: Optional human-readable description.
+        webhooks: Optional list of webhook triggers for this pipeline.
     """
 
     def __init__(
@@ -66,6 +67,7 @@ class Pipeline:
         name: str,
         rid: str | None = None,
         description: str | None = None,
+        webhooks: list[Webhook] | None = None,
     ):
         """Initialize a Pipeline.
 
@@ -75,10 +77,12 @@ class Pipeline:
                 backend will use this rid instead of generating a new one.
                 This enables renaming pipelines while preserving their identity.
             description: Optional human-readable description.
+            webhooks: Optional list of webhook triggers for this pipeline.
         """
         self.name = name
         self.rid = rid
         self.description = description
+        self.webhooks = webhooks or []
         # Auto-register this pipeline
         PIPELINE_REGISTRY[name] = self
 
@@ -153,7 +157,7 @@ class Pipeline:
         return _create
 
     def __repr__(self) -> str:
-        return f"Pipeline(name={self.name!r}, rid={self.rid!r}, description={self.description!r})"
+        return f"Pipeline(name={self.name!r}, rid={self.rid!r}, description={self.description!r}, webhooks={self.webhooks!r})"
 
 
 class PipelineData(BaseModel):
@@ -167,6 +171,7 @@ class PipelineData(BaseModel):
         name: The unique name of the pipeline.
         rid: Optional stable resource identifier (UUID).
         description: Optional human-readable description.
+        webhooks: Optional list of webhook definitions.
     """
 
     name: str
@@ -178,3 +183,6 @@ class PipelineData(BaseModel):
 
     description: Optional[str] = None
     """Optional human-readable description."""
+
+    webhooks: Optional[list[Webhook]] = None
+    """Optional list of webhook trigger definitions."""
