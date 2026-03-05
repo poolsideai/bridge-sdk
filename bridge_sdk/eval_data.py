@@ -61,6 +61,16 @@ def _is_any(tp: Any) -> bool:
     return tp is Any
 
 
+def _is_subclass_safe(tp: Any, target: type) -> bool:
+    """Check if tp is target or a subclass of target, safely."""
+    if tp is target:
+        return True
+    try:
+        return isinstance(tp, type) and issubclass(tp, target)
+    except TypeError:
+        return False
+
+
 def _type_schema_or_none(tp: Any) -> dict[str, Any] | None:
     """Generate a JSON schema for a type, returning None if it's Any."""
     if _is_any(tp):
@@ -99,13 +109,9 @@ def _extract_eval_type_info(
 
     # Determine context_type from the origin of the generic
     origin = get_origin(ctx_hint)
-    if origin is StepEvalContext:
+    if _is_subclass_safe(origin, StepEvalContext) or _is_subclass_safe(ctx_hint, StepEvalContext):
         context_type = "step"
-    elif origin is PipelineEvalContext:
-        context_type = "pipeline"
-    elif ctx_hint is StepEvalContext:
-        context_type = "step"
-    elif ctx_hint is PipelineEvalContext:
+    elif _is_subclass_safe(origin, PipelineEvalContext) or _is_subclass_safe(ctx_hint, PipelineEvalContext):
         context_type = "pipeline"
     else:
         raise TypeError(
@@ -130,7 +136,7 @@ def _extract_eval_type_info(
 
     if return_hint is not None:
         ret_origin = get_origin(return_hint)
-        if ret_origin is EvalResult or return_hint is EvalResult:
+        if _is_subclass_safe(ret_origin, EvalResult) or _is_subclass_safe(return_hint, EvalResult):
             ret_args = get_args(return_hint)
             if ret_args:
                 metrics_type = ret_args[0]
