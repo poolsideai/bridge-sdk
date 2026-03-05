@@ -68,6 +68,9 @@ uv run bridge config get-dsl --modules my_project.steps --output-file /tmp/dsl.j
       "return_json_schema": {},
       "params_from_step_results": {"param": "upstream_step"},
       "credential_bindings": {},
+      "eval_bindings": [
+        {"eval_name": "quality_check", "condition": {"type": "always"}}
+      ],
       "file_path": "my_project/steps.py",
       "file_line_number": 15
     }
@@ -76,7 +79,17 @@ uv run bridge config get-dsl --modules my_project.steps --output-file /tmp/dsl.j
     "pipeline_name": {
       "name": "pipeline_name",
       "rid": "uuid-optional",
-      "description": "..."
+      "description": "...",
+      "eval_bindings": []
+    }
+  },
+  "evals": {
+    "quality_check": {
+      "name": "quality_check",
+      "context_type": "step",
+      "metrics_schema": {},
+      "file_path": "my_project/evals.py",
+      "file_line_number": 10
     }
   }
 }
@@ -102,3 +115,21 @@ uv run bridge run \
 - `--modules`: Override module discovery
 
 When both `--input` and `--results` provide values for the same parameter, input takes precedence.
+
+### `bridge run-eval`
+
+Execute a single eval locally for testing.
+
+```bash
+uv run bridge run-eval \
+  --eval quality_check \
+  --context '{"step_name": "my_step", "step_input": {...}, "step_output": {...}, "metadata": {}}'
+```
+
+**Options:**
+- `--eval`: Eval name (required)
+- `--context`: Context JSON string, or `@filepath` to read from a file (required)
+- `--output-file`: Write result to file
+- `--modules`: Override module discovery
+
+The context JSON should match the structure of `StepEvalContext` or `PipelineEvalContext` depending on the eval's context type. See [evals.md](evals.md) for full details.

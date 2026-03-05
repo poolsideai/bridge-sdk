@@ -153,8 +153,9 @@ This keeps your `tool.bridge` config short, but you must remember to update `__i
 | Command | Description |
 |---------|-------------|
 | `bridge check` | Validate project setup |
-| `bridge config get-dsl` | Export step definitions as JSON |
+| `bridge config get-dsl` | Export step, pipeline, and eval definitions as JSON |
 | `bridge run --step <name> --input <json> --results <json>` | Execute a step |
+| `bridge run-eval --eval <name> --context <json>` | Execute an eval |
 
 ### Options
 
@@ -168,6 +169,12 @@ This keeps your `tool.bridge` config short, but you must remember to update `__i
 - `--results` - Cached results JSON from previous steps
 - `--results-file` - Path to results JSON file
 - `--output-file` - Write result to file
+
+**`run-eval`:**
+- `--eval` - Eval name (required)
+- `--context` - Context JSON string, or `@filepath` to read from file (required)
+- `--output-file` - Write result to file
+- `--modules` - Override modules from config
 
 ## Defining Steps with Pipelines (Recommended)
 
@@ -315,6 +322,89 @@ def my_step(value: str) -> str:
     return f"result: {value}"
 ```
 
+## Evals
+
+Evals are quality measurement functions that automatically run when steps or pipelines complete. Define an eval with `@bridge_eval`, then bind it to a step with `@evaluated_by`.
+
+### Defining an Eval
+
+```python
+from typing import TypedDict, Any
+from bridge_sdk import bridge_eval, EvalResult, StepEvalContext
+
+class QualityMetrics(TypedDict):
+    accuracy: float
+    followed_format: bool
+
+@bridge_eval
+def quality_check(ctx: StepEvalContext[Any, Any]) -> EvalResult[QualityMetrics]:
+    is_correct = ctx.step_output.answer == ctx.step_input.expected
+    return EvalResult(
+        metrics={"accuracy": 1.0 if is_correct else 0.0, "followed_format": True},
+        output="Looks good"  # Optional unstructured text
+    )
+```
+
+The eval function's first parameter type determines what it evaluates:
+- `StepEvalContext[I, O]` — evaluates a step (receives step input/output)
+- `PipelineEvalContext[I, O]` — evaluates a pipeline (receives all step results)
+
+Use `Any` for generic evals that work with any step, or specific types for type-safe evals.
+
+### Binding Evals to Steps
+
+```python
+from bridge_sdk import step, evaluated_by, on_branch, sample
+
+@step
+@evaluated_by(quality_check, when=on_branch("main"))
+@evaluated_by(llm_judge, when=on_branch("main") & sample(0.1))
+def my_step(input: TaskInput) -> TaskOutput:
+    ...
+```
+
+**Important:** `@evaluated_by` must appear **below** `@step` (closer to the function). Python applies decorators bottom-up.
+
+### Binding Evals to Pipelines
+
+Pipeline eval bindings are specified in the `Pipeline` constructor:
+
+```python
+from bridge_sdk import Pipeline, always
+
+pipeline = Pipeline(
+    name="my_pipeline",
+    evaluated_by=[(pipeline_quality, always())],
+)
+```
+
+### Conditions
+
+Conditions control when evals run:
+
+| Condition | Description |
+|-----------|-------------|
+| `always()` | Every execution (default) |
+| `never()` | Never run |
+| `on_branch("main")` | Only on the specified branch |
+| `sample(0.1)` | 10% of executions |
+
+Combine with `&` (and) and `|` (or):
+
+```python
+on_branch("main") & sample(0.1)           # Both must pass
+on_branch("main") | on_branch("staging")   # Either passes
+```
+
+### Running Evals Locally
+
+```bash
+uv run bridge run-eval \
+  --eval quality_check \
+  --context '{"step_name": "my_step", "step_input": {...}, "step_output": {...}, "metadata": {}}' \
+  --output-file /tmp/eval_result.json
+```
+
 ## Calling Agents
 
 The `BridgeSidecarClient.start_agent()` method returns a tuple of `(_, session_id, status)`, where `status` is just a success/fail message, **not** the actual agent output.
@@ -420,6 +510,7 @@ with BridgeSidecarClient() as client:
 
 ```python
 from bridge_sdk import (
+    # Pipelines & Steps
     Pipeline,          # Pipeline class for grouping steps
     PipelineData,      # Pydantic model for pipeline metadata
     PIPELINE_REGISTRY, # Global registry of discovered pipelines
@@ -430,6 +521,22 @@ from bridge_sdk import (
     SandboxDefinition, # Optional compute resources for a step's sandbox
     STEP_REGISTRY,     # Global registry of discovered steps
     get_dsl_output,    # Generate DSL from registry
+
+    # Evals
+    bridge_eval,       # Decorator for defining eval functions
+    EvalFunction,      # Type for decorated eval functions
+    EvalData,          # Pydantic model for eval metadata
+    EVAL_REGISTRY,     # Global registry of discovered evals
+    EvalResult,        # Return type for eval functions
+    StepEvalContext,   # Context for step-level evals
+    PipelineEvalContext, # Context for pipeline-level evals
+    evaluated_by,      # Decorator for binding evals to steps
+    EvalBindingData,   # Pydantic model for eval binding metadata
+    Condition,         # Base class for eval conditions
+    always,            # Condition: always run
+    never,             # Condition: never run
+    on_branch,         # Condition: run on specific branch
+    sample,            # Condition: run on percentage of executions
 )
 
 from bridge_sdk.bridge_sidecar_client import BridgeSidecarClient

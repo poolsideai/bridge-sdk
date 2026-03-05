@@ -3,10 +3,10 @@ name: bridge-pipelines
 description: >
   Build and configure Bridge pipelines using the Bridge SDK. Use when the task involves
   creating pipeline steps, defining step dependencies (DAGs), integrating agents into
-  pipelines, configuring credential bindings, setting up pyproject.toml for Bridge,
-  or working with the Bridge CLI (bridge check, bridge config get-dsl, bridge run).
-  Also use when connecting pipelines to the Poolside web interface via repository
-  indexing and build execution.
+  pipelines, configuring credential bindings, defining evals for quality measurement,
+  setting up pyproject.toml for Bridge, or working with the Bridge CLI (bridge check,
+  bridge config get-dsl, bridge run, bridge run-eval). Also use when connecting
+  pipelines to the Poolside web interface via repository indexing and build execution.
 ---
 
 # Bridge Pipelines
@@ -192,13 +192,37 @@ def agent_step() -> dict:
 
 **Important:** `start_agent()` returns `(agent_name, session_id, exit_result)`. The `exit_result` is just a status message — not the agent's output. Agents must write results to a file that the step reads.
 
+## Evals
+
+Evals measure the quality of step and pipeline outputs. Define evals with `@bridge_eval`, bind them to steps with `@evaluated_by`.
+
+```python
+from typing import TypedDict, Any
+from bridge_sdk import bridge_eval, EvalResult, StepEvalContext, evaluated_by, step, on_branch
+
+class QualityMetrics(TypedDict):
+    accuracy: float
+
+@bridge_eval
+def quality_check(ctx: StepEvalContext[Any, Any]) -> EvalResult[QualityMetrics]:
+    return EvalResult(metrics={"accuracy": 1.0})
+
+@step
+@evaluated_by(quality_check, when=on_branch("main"))
+def my_step(value: str) -> str:
+    return value
+```
+
+See [references/evals.md](references/evals.md) for the full evals reference including conditions, pipeline evals, and metadata types.
+
 ## CLI Reference
 
 | Command | Purpose |
 |---------|---------|
 | `bridge check` | Validate pyproject.toml and discover steps |
-| `bridge config get-dsl` | Generate JSON DSL of all pipelines and steps |
+| `bridge config get-dsl` | Generate JSON DSL of all pipelines, steps, and evals |
 | `bridge run --step NAME --input JSON --results JSON` | Execute a single step locally |
+| `bridge run-eval --eval NAME --context JSON` | Execute a single eval locally |
 
 See [references/cli.md](references/cli.md) for full CLI details.
 

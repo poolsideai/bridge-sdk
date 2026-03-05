@@ -16,11 +16,14 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, Optional, overload
+from typing import Any, Callable, Dict, List, Optional, overload
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing_extensions import ParamSpec, TypeVar
 
+from bridge_sdk.eval_binding import EvalBindingData
+from bridge_sdk.eval_conditions import Condition, always
+from bridge_sdk.eval_function import EvalFunction
 from bridge_sdk.models import SandboxDefinition
 from bridge_sdk.step_function import StepFunction, make_step_function
 
@@ -66,6 +69,7 @@ class Pipeline:
         name: str,
         rid: str | None = None,
         description: str | None = None,
+        evaluated_by: list[tuple[EvalFunction | str, Condition]] | None = None,
     ):
         """Initialize a Pipeline.
 
@@ -75,10 +79,33 @@ class Pipeline:
                 backend will use this rid instead of generating a new one.
                 This enables renaming pipelines while preserving their identity.
             description: Optional human-readable description.
+            evaluated_by: Optional list of (eval, condition) tuples binding
+                evals to this pipeline. Each tuple contains an EvalFunction
+                (or string name for cross-repo refs) and a Condition.
         """
         self.name = name
         self.rid = rid
         self.description = description
+
+        self._eval_bindings: list[EvalBindingData] = []
+        if evaluated_by:
+            for eval_ref, condition in evaluated_by:
+                if isinstance(eval_ref, EvalFunction):
+                    eval_name = eval_ref.eval_data.name
+                elif isinstance(eval_ref, str):
+                    eval_name = eval_ref
+                else:
+                    raise TypeError(
+                        f"evaluated_by entries must be (EvalFunction | str, Condition) tuples, "
+                        f"got eval_ref of type {type(eval_ref).__name__}"
+                    )
+                self._eval_bindings.append(
+                    EvalBindingData(
+                        eval_name=eval_name,
+                        condition=condition.to_dict(),
+                    )
+                )
+
         # Auto-register this pipeline
         PIPELINE_REGISTRY[name] = self
 
@@ -178,3 +205,6 @@ class PipelineData(BaseModel):
 
     description: Optional[str] = None
     """Optional human-readable description."""
+
+    eval_bindings: List[EvalBindingData] = Field(default_factory=list)
+    """Eval bindings attached to this pipeline."""
