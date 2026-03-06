@@ -27,6 +27,9 @@ inputs:
   token:
     description: "Bearer token for Poolside API authentication."
     required: true
+  api_base_url:
+    description: "Base URL for the Poolside API."
+    required: true
   ref:
     description: "Git branch or tag name. Defaults to the branch that triggered the workflow."
     required: false
@@ -35,10 +38,6 @@ inputs:
     description: "Git commit SHA. Defaults to the HEAD commit of the triggering branch."
     required: false
     default: ""
-  api_base_url:
-    description: "Base URL for the Poolside API."
-    required: false
-    default: "https://api.poolsi.de"
 
 runs:
   using: "composite"
