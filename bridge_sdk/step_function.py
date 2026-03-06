@@ -30,6 +30,7 @@ from typing_extensions import ParamSpec, TypeVar
 from bridge_sdk.exceptions import StepError
 from bridge_sdk.function_schema import FunctionSchema, create_function_schema
 from bridge_sdk.logger import logger
+from bridge_sdk.models import SandboxDefinition
 from bridge_sdk.step_data import StepData, create_step_data
 
 STEP_REGISTRY: Dict[str, "StepFunction[..., Any]"] = {}
@@ -106,9 +107,9 @@ class StepFunction(Generic[P, R]):
 
         # Type checker can't verify dynamic kwargs match P, but Pydantic validation ensures correctness
         if inspect.iscoroutinefunction(self._func):
-            result = await self._func(**kwargs)  # type: ignore[arg-type]
+            result = await self._func(**kwargs)  # type: ignore[call-arg, arg-type]
         else:
-            result = self._func(**kwargs)  # type: ignore[arg-type]
+            result = self._func(**kwargs)  # type: ignore[call-arg, arg-type]
 
         logger.debug(f"Step {self.step_data.name} completed.")
 
@@ -136,9 +137,9 @@ def make_step_function(
     setup_script: str | None = None,
     post_execution_script: str | None = None,
     metadata: dict[str, Any] | None = None,
-    sandbox_id: str | None = None,
     credential_bindings: dict[str, str] | None = None,
     pipeline_name: str | None = None,
+    sandbox_definition: SandboxDefinition | None = None,
 ) -> StepFunction[P, R]:
     """Create a StepFunction, register it, and return it.
 
@@ -156,9 +157,9 @@ def make_step_function(
         setup_script=setup_script,
         post_execution_script=post_execution_script,
         metadata=metadata,
-        sandbox_id=sandbox_id,
         credential_bindings=credential_bindings,
         pipeline_name=pipeline_name,
+        sandbox_definition=sandbox_definition,
     )
 
     step_function = StepFunction(the_func, schema, data)

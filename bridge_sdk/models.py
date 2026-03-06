@@ -26,11 +26,58 @@ Use whichever you prefer:
     - Protos:   ``bridge_sidecar_pb2.ContentPart(text="...")``
 """
 
-from typing import Annotated, Literal, Union
+from typing import Annotated, Literal, Optional, Union
 
 from pydantic import BaseModel, Field, TypeAdapter
 
 from bridge_sdk.proto import bridge_sidecar_pb2
+
+
+class SandboxDefinition(BaseModel):
+    """Defines an inline sandbox execution environment for a step.
+
+    Allows pipeline authors to specify custom Docker images and resource
+    requirements directly in the @step decorator instead of referencing
+    a pre-existing sandbox definition by ID.
+
+    Attributes:
+        image: The Docker image to use for the sandbox (required).
+        cpu_request: CPU request in Kubernetes format (e.g., '500m', '2').
+        memory_request: Memory request in Kubernetes format (e.g., '512Mi', '2Gi').
+        memory_limit: Memory limit in Kubernetes format (e.g., '1Gi', '4Gi').
+        storage_request: Storage request in Kubernetes format (e.g., '10Gi').
+        storage_limit: Storage limit in Kubernetes format (e.g., '50Gi').
+
+    Example:
+        @step(
+            sandbox_definition=SandboxDefinition(
+                image="python:3.11-slim",
+                cpu_request="500m",
+                memory_request="512Mi",
+                memory_limit="1Gi",
+            )
+        )
+        def my_step() -> str:
+            return "executed in custom sandbox"
+    """
+
+    image: Optional[str] = None
+    """The Docker image to use for the sandbox."""
+
+    cpu_request: Optional[str] = None
+    """CPU request in Kubernetes format (e.g., '500m', '2')."""
+
+    memory_request: Optional[str] = None
+    """Memory request in Kubernetes format (e.g., '512Mi', '2Gi')."""
+
+    memory_limit: Optional[str] = None
+    """Memory limit in Kubernetes format (e.g., '1Gi', '4Gi')."""
+
+    storage_request: Optional[str] = None
+    """Storage request in Kubernetes format (e.g., '10Gi')."""
+
+    storage_limit: Optional[str] = None
+    """Storage limit in Kubernetes format (e.g., '50Gi')."""
 
 
 class ImageURLContent(BaseModel):
@@ -62,7 +109,7 @@ ContentPart = Annotated[
 
 ContentPartInput = ContentPart | bridge_sidecar_pb2.ContentPart | dict
 
-content_part_adapter = TypeAdapter(ContentPart)
+content_part_adapter: TypeAdapter[ContentPart] = TypeAdapter(ContentPart)
 
 def to_proto_content_part(part: ContentPartInput) -> bridge_sidecar_pb2.ContentPart:
     """Convert a dict, Pydantic model, or proto ContentPart to a proto ContentPart.
