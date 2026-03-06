@@ -86,22 +86,30 @@ runs:
           -H "Content-Type: application/json" \
           -d "$PAYLOAD")
 
-        if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+        if [ "$HTTP_CODE" -eq 409 ]; then
+          COMMIT_ID=$(jq -r '.existing.id' response.txt)
+          rm -f response.txt
+          if [ -z "$COMMIT_ID" ] || [ "$COMMIT_ID" = "null" ]; then
+            echo "::error::Commit already indexed but 409 response missing existing commit ID"
+            exit 1
+          fi
+          echo "::warning::Commit already indexed (HTTP 409), polling existing commit for completion..."
+        elif [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
           echo "::error::Bridge API call failed with HTTP ${HTTP_CODE}"
           cat response.txt
           rm -f response.txt
           exit 1
+        else
+          COMMIT_ID=$(jq -r '.id' response.txt)
+          rm -f response.txt
+          if [ -z "$COMMIT_ID" ] || [ "$COMMIT_ID" = "null" ]; then
+            echo "::error::Failed to extract commit ID from response"
+            exit 1
+          fi
+          echo "Bridge API call succeeded (HTTP ${HTTP_CODE})"
         fi
 
-        COMMIT_ID=$(jq -r '.id' response.txt)
-        rm -f response.txt
-
-        if [ -z "$COMMIT_ID" ] || [ "$COMMIT_ID" = "null" ]; then
-          echo "::error::Failed to extract commit ID from response"
-          exit 1
-        fi
-
-        echo "Bridge API call succeeded (HTTP ${HTTP_CODE}), commit_id=${COMMIT_ID}"
+        echo "commit_id=${COMMIT_ID}"
         echo "commit_id=${COMMIT_ID}" >> "$GITHUB_OUTPUT"
 
     - name: Wait for indexing to finish
