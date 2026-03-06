@@ -68,6 +68,17 @@ runs:
           -H "Content-Type: application/json" \
           -d "{\"branch\": \"${REF}\", \"commit_hash\": \"${SHA}\"}")
 
+        # Handle 409 Conflict (duplicate commit) - extract existing commit ID for idempotent retry
+        if [ "$HTTP_CODE" -eq 409 ]; then
+          EXISTING_ID=$(jq -r '.existing.id // empty' response.txt 2>/dev/null || true)
+          if [ -n "$EXISTING_ID" ]; then
+            echo "Commit ${SHA} is already indexed (existing commit ID: ${EXISTING_ID})"
+            rm -f response.txt
+            exit 0
+          fi
+          # Fall through to error handling if no existing.id found (backward compatibility)
+        fi
+
         if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
           echo "::error::Bridge API call failed with HTTP ${HTTP_CODE}"
           cat response.txt
