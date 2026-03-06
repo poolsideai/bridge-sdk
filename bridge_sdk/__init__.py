@@ -44,6 +44,34 @@ from .models import (
     to_proto_content_part,
 )
 
+from .eval import bridge_eval
+
+from .eval_function import (
+    EvalFunction,
+    EVAL_REGISTRY,
+)
+
+from .eval_data import EvalData
+
+from .eval_types import (
+    EvalResult,
+    StepEvalContext,
+    PipelineEvalContext,
+)
+
+from .eval_binding import (
+    evaluated_by,
+    EvalBindingData,
+)
+
+from .eval_conditions import (
+    Condition,
+    always,
+    never,
+    on_branch,
+    sample,
+)
+
 __all__ = [
     "step",
     "StepFunction",
@@ -61,4 +89,18 @@ __all__ = [
     "SandboxDefinition",
     "TextContentPart",
     "to_proto_content_part",
+    "bridge_eval",
+    "EvalFunction",
+    "EVAL_REGISTRY",
+    "EvalData",
+    "EvalResult",
+    "StepEvalContext",
+    "PipelineEvalContext",
+    "evaluated_by",
+    "EvalBindingData",
+    "Condition",
+    "always",
+    "never",
+    "on_branch",
+    "sample",
 ]
