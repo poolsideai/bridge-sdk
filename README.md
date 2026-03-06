@@ -436,6 +436,49 @@ from bridge_sdk.bridge_sidecar_client import BridgeSidecarClient
 from bridge_sdk.proto.bridge_sidecar_pb2 import ContinueFrom, RunDetail
 ```
 
+## GitHub Action: Auto-Index on Push
+
+A GitHub Action is included to automatically index your repository in Bridge whenever code is pushed. It triggers indexing and polls until complete.
+
+Add `.github/workflows/bridge-index.yml` to your repo:
+
+```yaml
+name: Bridge Index Branch
+
+on:
+  push:
+
+jobs:
+  index:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: poolsideai/bridge-sdk/action@main
+        with:
+          repository_id: ${{ secrets.BRIDGE_REPOSITORY_ID }}
+          token: ${{ secrets.BRIDGE_API_TOKEN }}
+          api_base_url: ${{ secrets.BRIDGE_API_URL }}
+```
+
+Then add these as repository secrets: `BRIDGE_REPOSITORY_ID`, `BRIDGE_API_TOKEN`, and `BRIDGE_API_URL`.
+
+### Inputs
+
+| Input | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `repository_id` | yes | — | Bridge repository ID |
+| `token` | yes | — | Bearer token for API auth |
+| `api_base_url` | yes | — | Base URL for the Poolside API |
+| `ref` | no | `github.ref_name` | Branch or tag name to index |
+| `commit_sha` | no | `github.sha` | Commit SHA to index |
+| `poll_interval` | no | `5` | Seconds between status polls |
+| `poll_timeout` | no | `300` | Max seconds to wait for indexing |
+
+### Outputs
+
+| Output | Description |
+|--------|-------------|
+| `commit_id` | The Bridge commit ID, available for downstream steps |
+
 ## Development
 
 ```bash
