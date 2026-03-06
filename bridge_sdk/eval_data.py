@@ -56,19 +56,17 @@ class EvalData(BaseModel):
     """JSON Schema of the output type parameter, or null if Any."""
 
 
+def _is_subclass_safe(tp: Any, target: type) -> bool:
+    """Check if tp is a subclass of target, returning False instead of raising."""
+    try:
+        return tp is not None and issubclass(tp, target)
+    except TypeError:
+        return False
+
+
 def _is_any(tp: Any) -> bool:
     """Check if a type is Any."""
     return tp is Any
-
-
-def _is_subclass_safe(tp: Any, target: type) -> bool:
-    """Check if tp is target or a subclass of target, safely."""
-    if tp is target:
-        return True
-    try:
-        return isinstance(tp, type) and issubclass(tp, target)
-    except TypeError:
-        return False
 
 
 def _type_schema_or_none(tp: Any) -> dict[str, Any] | None:

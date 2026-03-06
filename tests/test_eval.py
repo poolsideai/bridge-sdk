@@ -19,7 +19,8 @@ import tempfile
 from pathlib import Path
 
 import pytest
-from typing import Any, TypedDict
+from typing import Any
+from typing_extensions import TypedDict
 
 from bridge_sdk import (
     EVAL_REGISTRY,
