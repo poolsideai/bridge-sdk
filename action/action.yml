@@ -13,7 +13,7 @@
 # limitations under the License.
 
 name: "Bridge Index Branch"
-description: "Notify the Poolside Bridge API to index a branch at a specific commit."
+description: "Index a branch at a specific commit via the Poolside Bridge API and poll until indexing finishes."
 author: "Poolside"
 
 branding:
@@ -38,11 +38,26 @@ inputs:
     description: "Git commit SHA. Defaults to the HEAD commit of the triggering branch."
     required: false
     default: ""
+  poll_interval:
+    description: "Seconds between status polls."
+    required: false
+    default: "5"
+  poll_timeout:
+    description: "Maximum seconds to wait for indexing to complete."
+    required: false
+    default: "300"
+
+outputs:
+  commit_id:
+    description: "The Bridge commit ID returned by the API."
+    value: ${{ steps.index.outputs.commit_id }}
 
 runs:
   using: "composite"
   steps:
-    - shell: bash
+    - name: Trigger indexing
+      id: index
+      shell: bash
       env:
         INPUT_REPOSITORY_ID: ${{ inputs.repository_id }}
         INPUT_TOKEN: ${{ inputs.token }}
@@ -60,20 +75,95 @@ runs:
         echo "::add-mask::${INPUT_TOKEN}"
         echo "Indexing branch '${REF}' at commit ${SHA} for repository ${INPUT_REPOSITORY_ID}"
 
+        PAYLOAD=$(jq -n --arg branch "$REF" --arg sha "$SHA" \
+          '{branch: $branch, commit_hash: $sha}')
+
         HTTP_CODE=$(curl --silent --output response.txt --write-out "%{http_code}" \
           -X POST \
           "${INPUT_API_BASE_URL}/v0/bridge/repositories/${INPUT_REPOSITORY_ID}/commits" \
           -H "accept: application/json" \
           -H "Authorization: Bearer ${INPUT_TOKEN}" \
           -H "Content-Type: application/json" \
-          -d "{\"branch\": \"${REF}\", \"commit_hash\": \"${SHA}\"}")
+          -d "$PAYLOAD")
 
-        if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+        if [ "$HTTP_CODE" -eq 409 ]; then
+          COMMIT_ID=$(jq -r '.existing.id' response.txt)
+          rm -f response.txt
+          if [ -z "$COMMIT_ID" ] || [ "$COMMIT_ID" = "null" ]; then
+            echo "::error::Commit already indexed but 409 response missing existing commit ID"
+            exit 1
+          fi
+          echo "::warning::Commit already indexed (HTTP 409), polling existing commit for completion..."
+        elif [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
           echo "::error::Bridge API call failed with HTTP ${HTTP_CODE}"
           cat response.txt
           rm -f response.txt
           exit 1
+        else
+          COMMIT_ID=$(jq -r '.id' response.txt)
+          rm -f response.txt
+          if [ -z "$COMMIT_ID" ] || [ "$COMMIT_ID" = "null" ]; then
+            echo "::error::Failed to extract commit ID from response"
+            exit 1
+          fi
+          echo "Bridge API call succeeded (HTTP ${HTTP_CODE})"
         fi
 
-        echo "Bridge API call succeeded (HTTP ${HTTP_CODE})"
-        rm -f response.txt
+        echo "commit_id=${COMMIT_ID}"
+        echo "commit_id=${COMMIT_ID}" >> "$GITHUB_OUTPUT"
+
+    - name: Wait for indexing to finish
+      shell: bash
+      env:
+        INPUT_REPOSITORY_ID: ${{ inputs.repository_id }}
+        INPUT_TOKEN: ${{ inputs.token }}
+        INPUT_API_BASE_URL: ${{ inputs.api_base_url }}
+        INPUT_POLL_INTERVAL: ${{ inputs.poll_interval }}
+        INPUT_POLL_TIMEOUT: ${{ inputs.poll_timeout }}
+        COMMIT_ID: ${{ steps.index.outputs.commit_id }}
+      run: |
+        set -euo pipefail
+
+        echo "::add-mask::${INPUT_TOKEN}"
+        echo "Polling for commit ${COMMIT_ID} to finish indexing..."
+
+        ELAPSED=0
+        while true; do
+          sleep "${INPUT_POLL_INTERVAL}"
+          ELAPSED=$((ELAPSED + INPUT_POLL_INTERVAL))
+
+          POLL_CODE=$(curl --silent --output poll_response.txt --write-out "%{http_code}" \
+            -X GET \
+            "${INPUT_API_BASE_URL}/v0/bridge/repositories/${INPUT_REPOSITORY_ID}/commits/${COMMIT_ID}" \
+            -H "accept: application/json" \
+            -H "Authorization: Bearer ${INPUT_TOKEN}")
+
+          if [ "$POLL_CODE" -lt 200 ] || [ "$POLL_CODE" -ge 300 ]; then
+            echo "::error::Status poll failed with HTTP ${POLL_CODE}"
+            cat poll_response.txt
+            rm -f poll_response.txt
+            exit 1
+          fi
+
+          STATE=$(jq -r '.state' poll_response.txt)
+          STATUS_DESC=$(jq -r '.status_description // empty' poll_response.txt)
+          rm -f poll_response.txt
+
+          echo "State: ${STATE} (${ELAPSED}s elapsed)${STATUS_DESC:+ — ${STATUS_DESC}}"
+
+          case "$STATE" in
+            finished)
+              echo "Indexing finished successfully"
+              exit 0
+              ;;
+            failed|error)
+              echo "::error::Indexing failed: ${STATUS_DESC}"
+              exit 1
+              ;;
+          esac
+
+          if [ "$ELAPSED" -ge "${INPUT_POLL_TIMEOUT}" ]; then
+            echo "::error::Timed out after ${INPUT_POLL_TIMEOUT}s waiting for indexing (last state: ${STATE})"
+            exit 1
+          fi
+        done
