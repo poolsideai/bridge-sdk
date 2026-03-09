@@ -356,7 +356,7 @@ async def cmd_run_step(args):
 
 
 async def cmd_run_eval(args):
-    """Handle 'run-eval' command to execute an eval."""
+    """Handle 'eval run' command to execute an eval."""
     modules = get_modules_from_args(args)
     if not modules:
         print(
@@ -454,25 +454,30 @@ def main():
     run_parser.add_argument("--output-file", help="Path to write the step result to")
     run_parser.set_defaults(func=cmd_run_step)
 
-    # 'run-eval' command
-    run_eval_parser = subparsers.add_parser("run-eval", help="Run a specific eval")
-    run_eval_parser.add_argument(
-        "--eval", required=True, help="Name of the eval to run"
-    )
-    run_eval_parser.add_argument(
-        "--context",
-        required=True,
-        help="JSON context string, or @filepath to read from file",
-    )
-    run_eval_parser.add_argument(
-        "--modules",
-        nargs="+",
-        help="Module paths to discover evals from",
-    )
-    run_eval_parser.add_argument(
-        "--output-file", help="Path to write the eval result to"
-    )
-    run_eval_parser.set_defaults(func=cmd_run_eval)
+    def add_eval_run_arguments(eval_run_parser):
+        eval_run_parser.add_argument(
+            "--eval", required=True, help="Name of the eval to run"
+        )
+        eval_run_parser.add_argument(
+            "--context",
+            required=True,
+            help="JSON context string, or @filepath to read from file",
+        )
+        eval_run_parser.add_argument(
+            "--modules",
+            nargs="+",
+            help="Module paths to discover evals from",
+        )
+        eval_run_parser.add_argument(
+            "--output-file", help="Path to write the eval result to"
+        )
+        eval_run_parser.set_defaults(func=cmd_run_eval)
+
+    # 'eval run' command
+    eval_parser = subparsers.add_parser("eval", help="Eval commands")
+    eval_subparsers = eval_parser.add_subparsers(dest="eval_command")
+    eval_run_parser = eval_subparsers.add_parser("run", help="Run a specific eval")
+    add_eval_run_arguments(eval_run_parser)
 
     args = parser.parse_args()
 

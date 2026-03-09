@@ -17,6 +17,7 @@
 import json
 import tempfile
 from pathlib import Path
+from datetime import timezone
 
 import pytest
 from typing import Any
@@ -665,6 +666,103 @@ class TestOnInvokeEval:
         assert result["metrics"]["scores"]["a"] == 1.0
         assert result["metrics"]["tags"] == ["good", "fast"]
 
+    @pytest.mark.asyncio
+    async def test_typed_step_context_deserialization(self):
+        from pydantic import BaseModel
+
+        class StepInput(BaseModel):
+            expected: str
+
+        class StepOutput(BaseModel):
+            answer: str
+
+        @bridge_eval
+        def my_eval(
+            ctx: StepEvalContext[StepInput, StepOutput],
+        ) -> EvalResult[QualityMetrics]:
+            return EvalResult(
+                metrics={
+                    "accuracy": 1.0 if ctx.step_output.answer == ctx.step_input.expected else 0.0,
+                    "followed_format": True,
+                }
+            )
+
+        context_json = json.dumps(
+            {
+                "step_name": "test",
+                "step_input": {"expected": "right"},
+                "step_output": {"answer": "right"},
+                "metadata": {},
+            }
+        )
+
+        result_json = await my_eval.on_invoke_eval(context=context_json)
+        result = json.loads(result_json)
+        assert result["metrics"]["accuracy"] == 1.0
+
+    @pytest.mark.asyncio
+    async def test_typed_pipeline_context_deserialization(self):
+        from pydantic import BaseModel
+
+        class PipelineInput(BaseModel):
+            dataset: str
+
+        class PipelineOutput(BaseModel):
+            score: float
+
+        @bridge_eval
+        def my_eval(
+            ctx: PipelineEvalContext[PipelineInput, PipelineOutput],
+        ) -> EvalResult[QualityMetrics]:
+            return EvalResult(
+                metrics={
+                    "accuracy": ctx.pipeline_output.score,
+                    "followed_format": ctx.pipeline_input.dataset == "golden",
+                }
+            )
+
+        context_json = json.dumps(
+            {
+                "pipeline_name": "test_pipeline",
+                "pipeline_input": {"dataset": "golden"},
+                "pipeline_output": {"score": 1.0},
+                "steps": {},
+            }
+        )
+
+        result_json = await my_eval.on_invoke_eval(context=context_json)
+        result = json.loads(result_json)
+        assert result["metrics"]["accuracy"] == 1.0
+        assert result["metrics"]["followed_format"] is True
+
+    @pytest.mark.asyncio
+    async def test_step_eval_accepts_rfc3339_z_timestamps(self):
+        @bridge_eval
+        def my_eval(ctx: StepEvalContext[Any, Any]) -> EvalResult[QualityMetrics]:
+            return EvalResult(
+                metrics={
+                    "accuracy": 1.0,
+                    "followed_format": ctx.metadata.started_at.tzinfo is not None,
+                }
+            )
+
+        context_json = json.dumps(
+            {
+                "step_name": "test_step",
+                "step_input": None,
+                "step_output": None,
+                "metadata": {
+                    "started_at": "2026-01-01T00:00:00.123456789Z",
+                    "completed_at": "2026-01-01T00:01:00Z",
+                },
+            }
+        )
+
+        result_json = await my_eval.on_invoke_eval(context=context_json)
+        result = json.loads(result_json)
+        assert result["metrics"]["accuracy"] == 1.0
+        assert result["metrics"]["followed_format"] is True
+
 
 # --- Internal helper tests ---
 
@@ -684,6 +782,15 @@ class TestInternalHelpers:
     def test_parse_datetime_invalid_type(self):
         with pytest.raises(TypeError, match="Cannot parse datetime"):
             _parse_datetime(12345)
+
+    def test_parse_datetime_rfc3339_z(self):
+        dt = _parse_datetime("2026-03-05T10:30:00Z")
+        assert dt.tzinfo is not None
+        assert dt.utcoffset() == timezone.utc.utcoffset(dt)
+
+    def test_parse_datetime_rfc3339_nanos(self):
+        dt = _parse_datetime("2026-03-05T10:30:00.123456789Z")
+        assert dt.microsecond == 123456
 
     def test_build_step_context_with_partial_metadata(self):
         ctx = _build_step_eval_context({
