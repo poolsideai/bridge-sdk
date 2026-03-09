@@ -108,7 +108,9 @@ GET    /v0/bridge/repositories/{repo_id}/pipeline-steps/{step_id}/file      Get 
 
 ```
 POST   /v0/bridge/repositories/{repo_id}/build                              Create build
-GET    /v0/bridge/repositories/{repo_id}/builds                             List builds
+GET    /v0/bridge/repositories/{repo_id}/build                              List builds
+GET    /v0/bridge/repositories/{repo_id}/build/{build_id}                   Get build by ID
+POST   /v0/bridge/repositories/{repo_id}/build/{build_id}/cancel            Cancel build
 GET    /v0/bridge/repositories/{repo_id}/pipeline-step-runs                 List runs
 GET    /v0/bridge/repositories/{repo_id}/pipeline-step-runs/filter          Filter runs
 GET    /v0/bridge/repositories/{repo_id}/pipeline-step-runs/{run_id}        Get run
@@ -130,4 +132,4 @@ Bridge uses Cedar-based authorization with owner-scoped access control. All reso
 
 - `create-bridge-credential`, `list-bridge-credentials`, `get-bridge-credential`, etc.
 - `create-bridge-repository`, `list-bridge-repositories`, `get-bridge-repository`, etc.
-- `index-bridge-repository-commit`, `create-bridge-build`, `list-bridge-builds`, etc.
+- `index-bridge-repository-commit`, `create-bridge-build`, `list-bridge-builds`, `get-bridge-build`, etc.
