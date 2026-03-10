@@ -108,9 +108,9 @@ GET    /v0/bridge/repositories/{repo_id}/pipeline-steps/{step_id}/file      Get 
 
 ```
 POST   /v0/bridge/repositories/{repo_id}/build                              Create build
-GET    /v0/bridge/repositories/{repo_id}/builds                              List builds
-GET    /v0/bridge/repositories/{repo_id}/builds/{build_id}                   Get build by ID
-POST   /v0/bridge/repositories/{repo_id}/builds/{build_id}/cancel            Cancel build
+GET    /v0/bridge/repositories/{repo_id}/builds                             List builds
+GET    /v0/bridge/repositories/{repo_id}/builds/{build_id}                  Get build by ID
+POST   /v0/bridge/repositories/{repo_id}/builds/{build_id}/cancel           Cancel build
 GET    /v0/bridge/repositories/{repo_id}/pipeline-step-runs                 List runs
 GET    /v0/bridge/repositories/{repo_id}/pipeline-step-runs/filter          Filter runs
 GET    /v0/bridge/repositories/{repo_id}/pipeline-step-runs/{run_id}        Get run
