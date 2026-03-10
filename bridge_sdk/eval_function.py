@@ -193,11 +193,24 @@ def _build_pipeline_eval_context(
     )
 
 
+def _encode_eval_result_value(value: Any) -> dict[str, Any]:
+    if isinstance(value, bool):
+        return {"type": "boolean", "boolean_value": value}
+    if isinstance(value, (int, float)):
+        return {"type": "number", "number_value": float(value)}
+    if isinstance(value, str):
+        return {"type": "string", "string_value": value}
+    raise TypeError(
+        "EvalResult.result must be bool, number, or string, "
+        f"got {type(value).__name__}"
+    )
+
+
 def _serialize_eval_result(result: EvalResult[Any]) -> str:
     """Serialize an EvalResult to a JSON string."""
     data: dict[str, Any] = {"metrics": result.metrics}
-    if result.output is not None:
-        data["output"] = result.output
+    if result.result is not None:
+        data["result"] = _encode_eval_result_value(result.result)
     return json.dumps(data)
 
 
@@ -226,7 +239,7 @@ class EvalFunction:
                 (StepEvalContext or PipelineEvalContext fields).
 
         Returns:
-            JSON string of the EvalResult (metrics + optional output).
+            JSON string of the EvalResult (metrics + optional result).
         """
         try:
             context_data: dict[str, Any] = json.loads(context) if context else {}

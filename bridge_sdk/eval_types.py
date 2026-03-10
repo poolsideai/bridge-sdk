@@ -24,6 +24,8 @@ I = TypeVar("I")
 O = TypeVar("O")
 M = TypeVar("M")
 
+EvalResultValue = bool | float | str
+
 
 @dataclass
 class EvalResult(Generic[M]):
@@ -31,11 +33,12 @@ class EvalResult(Generic[M]):
 
     Args:
         metrics: Structured metrics matching the eval's metrics schema.
-        output: Optional unstructured text output (e.g., LLM judge reasoning).
+        result: Optional typed primary value for first-class rendering.
+            Supported values are ``bool``, ``float``, and ``str``.
     """
 
     metrics: M
-    output: str | None = None
+    result: EvalResultValue | None = None
 
 
 @dataclass

@@ -426,7 +426,7 @@ class TestOnInvokeEval:
                     "accuracy": 1.0 if ctx.step_output == "correct" else 0.0,
                     "followed_format": True,
                 },
-                output="Looks good",
+                result="Looks good",
             )
 
         context_json = json.dumps(
@@ -454,7 +454,7 @@ class TestOnInvokeEval:
 
         assert result["metrics"]["accuracy"] == 1.0
         assert result["metrics"]["followed_format"] is True
-        assert result["output"] == "Looks good"
+        assert result["result"] == {"type": "string", "string_value": "Looks good"}
 
     @pytest.mark.asyncio
     async def test_pipeline_eval_invocation(self):
@@ -535,7 +535,7 @@ class TestOnInvokeEval:
 
         result_json = await my_eval.on_invoke_eval(context=context_json)
         result = json.loads(result_json)
-        assert "output" not in result
+        assert "result" not in result
 
     @pytest.mark.asyncio
     async def test_invalid_json_context_raises(self):
@@ -795,18 +795,44 @@ class TestInternalHelpers:
         assert ctx.steps["a"].output == 2
         assert ctx.steps["b"].success is False
 
-    def test_serialize_eval_result_with_output(self):
-        result = EvalResult(metrics={"score": 1.0}, output="reasoning")
+    def test_serialize_eval_result_with_string_result(self):
+        result = EvalResult(metrics={"score": 1.0}, result="reasoning")
         s = _serialize_eval_result(result)
         parsed = json.loads(s)
         assert parsed["metrics"]["score"] == 1.0
-        assert parsed["output"] == "reasoning"
+        assert parsed["result"] == {
+            "type": "string",
+            "string_value": "reasoning",
+        }
 
-    def test_serialize_eval_result_without_output(self):
+    def test_serialize_eval_result_without_result(self):
         result = EvalResult(metrics={"score": 1.0})
         s = _serialize_eval_result(result)
         parsed = json.loads(s)
-        assert "output" not in parsed
+        assert "result" not in parsed
+
+    def test_serialize_eval_result_with_boolean_result(self):
+        result = EvalResult(metrics={"score": 1.0}, result=True)
+        s = _serialize_eval_result(result)
+        parsed = json.loads(s)
+        assert parsed["result"] == {
+            "type": "boolean",
+            "boolean_value": True,
+        }
+
+    def test_serialize_eval_result_with_numeric_result(self):
+        result = EvalResult(metrics={"score": 1.0}, result=0.42)
+        s = _serialize_eval_result(result)
+        parsed = json.loads(s)
+        assert parsed["result"] == {
+            "type": "number",
+            "number_value": 0.42,
+        }
+
+    def test_serialize_eval_result_invalid_result_type_raises(self):
+        result = EvalResult(metrics={"score": 1.0}, result=["bad"])  # type: ignore[arg-type]
+        with pytest.raises(TypeError, match="result"):
+            _serialize_eval_result(result)
 
 
 # --- Type extraction edge cases ---
