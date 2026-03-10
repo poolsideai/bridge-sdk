@@ -60,8 +60,8 @@ from .eval_types import (
 )
 
 from .eval_binding import (
-    evaluated_by,
     EvalBindingData,
+    EvalBindingSpec,
 )
 
 from .eval_conditions import (
@@ -96,8 +96,8 @@ __all__ = [
     "EvalResult",
     "StepEvalContext",
     "PipelineEvalContext",
-    "evaluated_by",
     "EvalBindingData",
+    "EvalBindingSpec",
     "Condition",
     "always",
     "never",

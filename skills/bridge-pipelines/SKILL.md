@@ -194,11 +194,11 @@ def agent_step() -> dict:
 
 ## Evals
 
-Evals measure the quality of step and pipeline outputs. Define evals with `@bridge_eval`, bind them to steps with `@evaluated_by`.
+Evals measure the quality of step and pipeline outputs. Define evals with `@bridge_eval`, then attach them via `eval_bindings` on step/pipeline definitions.
 
 ```python
 from typing import TypedDict, Any
-from bridge_sdk import bridge_eval, EvalResult, StepEvalContext, evaluated_by, step, on_branch
+from bridge_sdk import bridge_eval, EvalResult, StepEvalContext, step, on_branch
 
 class QualityMetrics(TypedDict):
     accuracy: float
@@ -207,8 +207,7 @@ class QualityMetrics(TypedDict):
 def quality_check(ctx: StepEvalContext[Any, Any]) -> EvalResult[QualityMetrics]:
     return EvalResult(metrics={"accuracy": 1.0})
 
-@step
-@evaluated_by(quality_check, when=on_branch("main"))
+@step(eval_bindings=[(quality_check, on_branch("main"))])
 def my_step(value: str) -> str:
     return value
 ```

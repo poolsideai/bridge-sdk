@@ -21,7 +21,7 @@ def quality_check(ctx: StepEvalContext[Any, Any]) -> EvalResult[QualityMetrics]:
     is_correct = ctx.step_output.answer == ctx.step_input.expected
     return EvalResult(
         metrics={"accuracy": 1.0 if is_correct else 0.0, "followed_format": True},
-        output="Optional reasoning text"
+        result="Optional reasoning text"
     )
 ```
 
@@ -100,10 +100,10 @@ def bare_eval(ctx: StepEvalContext) -> EvalResult[M]: ...
 from bridge_sdk import EvalResult
 
 # Metrics are structured (TypedDict) — tracked quantitatively over time
-# Output is optional text — for qualitative reasoning (LLM judges, etc.)
+# Result is optional typed output (`str`, `bool`, or `number`)
 result = EvalResult(
     metrics={"accuracy": 0.95, "relevance": 4},
-    output="The response was accurate but verbose..."
+    result="The response was accurate but verbose..."
 )
 ```
 
@@ -113,21 +113,24 @@ result = EvalResult(
 @bridge_eval
 async def async_eval(ctx: StepEvalContext[Any, Any]) -> EvalResult[M]:
     result = await call_llm_judge(ctx.step_output)
-    return EvalResult(metrics={"score": result.score}, output=result.reasoning)
+    return EvalResult(metrics={"score": result.score}, result=result.reasoning)
 ```
 
 ## Binding Evals
 
 ### To Steps
 
-Use `@evaluated_by` below `@step` (Python applies decorators bottom-up):
+Bind evals on `@step` using `eval_bindings`:
 
 ```python
-from bridge_sdk import step, evaluated_by, on_branch, sample
+from bridge_sdk import step, on_branch, sample
 
-@step
-@evaluated_by(quality_check, when=on_branch("main"))
-@evaluated_by(llm_judge, when=on_branch("main") & sample(0.1))
+@step(
+    eval_bindings=[
+        (quality_check, on_branch("main")),
+        (llm_judge, on_branch("main") & sample(0.1)),
+    ]
+)
 def my_step(input: TaskInput) -> TaskOutput:
     ...
 ```
@@ -135,13 +138,14 @@ def my_step(input: TaskInput) -> TaskOutput:
 Works with `@pipeline.step` too:
 
 ```python
-@pipeline.step
-@evaluated_by(quality_check)
+@pipeline.step(eval_bindings=[quality_check])
 def my_step(value: str) -> str:
     ...
 ```
 
-Multiple `@evaluated_by` decorators can be stacked. Each creates a separate binding.
+Each `eval_bindings` entry can be:
+- `EvalFunction | str` (defaults condition to `true`)
+- `(EvalFunction | str, Condition | str)`
 
 ### To Pipelines
 
@@ -152,7 +156,7 @@ from bridge_sdk import Pipeline, always
 
 pipeline = Pipeline(
     name="my_pipeline",
-    evaluated_by=[
+    eval_bindings=[
         (pipeline_quality, always()),
         (llm_judge, on_branch("main") & sample(0.1)),
     ],
@@ -164,8 +168,7 @@ pipeline = Pipeline(
 Use a string name to reference evals defined in another repository:
 
 ```python
-@step
-@evaluated_by("other_repo/quality_check", when=always())
+@step(eval_bindings=[("other_repo/quality_check", always())])
 def my_step(value: str) -> str:
     ...
 ```
@@ -174,12 +177,12 @@ def my_step(value: str) -> str:
 
 Conditions control when an eval runs. They are evaluated by the platform before execution.
 
-| Factory | Serialization | Description |
-|---------|--------------|-------------|
-| `always()` | `{"type": "always"}` | Every execution (default) |
-| `never()` | `{"type": "never"}` | Never run |
-| `on_branch("main")` | `{"type": "branch", "branch": "main"}` | Only on specified branch |
-| `sample(0.1)` | `{"type": "sample", "rate": 0.1}` | Random 10% of executions |
+| Factory | CEL serialization | Description |
+|---------|-------------------|-------------|
+| `always()` | `true` | Every execution (default) |
+| `never()` | `false` | Never run |
+| `on_branch("main")` | `metadata.branch == "main"` | Only on specified branch |
+| `sample(0.1)` | `sample_value < 0.1` | Deterministic 10% of executions |
 
 ### Combinators
 
@@ -187,14 +190,6 @@ Conditions control when an eval runs. They are evaluated by the platform before 
 on_branch("main") & sample(0.1)           # AND — both must pass
 on_branch("main") | on_branch("staging")   # OR — either passes
 (on_branch("main") & sample(0.1)) | always()  # Nested
-```
-
-Chaining the same operator flattens automatically:
-
-```python
-# These produce the same result:
-a & b & c
-# {"type": "and", "conditions": [a, b, c]}  — flat, not nested
 ```
 
 ## DSL Output
@@ -209,7 +204,7 @@ a & b & c
       "eval_bindings": [
         {
           "eval_name": "quality_check",
-          "condition": {"type": "branch", "branch": "main"}
+          "condition": "metadata.branch == \"main\""
         }
       ]
     }
@@ -218,7 +213,7 @@ a & b & c
     "my_pipeline": {
       "name": "my_pipeline",
       "eval_bindings": [
-        {"eval_name": "pipeline_quality", "condition": {"type": "always"}}
+        {"eval_name": "pipeline_quality", "condition": "true"}
       ]
     }
   },

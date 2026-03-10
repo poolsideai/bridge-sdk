@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""@evaluated_by decorator for binding evals to steps and pipelines."""
+"""Helpers for normalizing eval bindings on steps and pipelines."""
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import TypeAlias
 
 from pydantic import BaseModel
 
@@ -33,68 +33,44 @@ class EvalBindingData(BaseModel):
     condition: str
     """CEL expression controlling when the eval runs."""
 
+EvalRef: TypeAlias = EvalFunction | str
+EvalBindingSpec: TypeAlias = EvalRef | tuple[EvalRef, Condition | str]
 
-def evaluated_by(
-    eval_ref: EvalFunction | str,
-    *,
-    when: Condition | str | None = None,
-) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-    """Decorator that binds an eval to a step or pipeline.
 
-    Must be applied **below** ``@step`` (i.e., closer to the function
-    definition), since Python applies decorators bottom-up::
+def normalize_eval_bindings(
+    eval_bindings: list[EvalBindingSpec] | None,
+) -> list[EvalBindingData]:
+    """Normalize user-facing eval binding specs into DSL bindings."""
+    if not eval_bindings:
+        return []
 
-        @step                          # applied second
-        @evaluated_by(my_eval)         # applied first
-        def my_step(...): ...
+    normalized: list[EvalBindingData] = []
+    for spec in eval_bindings:
+        if isinstance(spec, tuple):
+            if len(spec) != 2:
+                raise TypeError(
+                    "tuple eval binding entries must be (EvalFunction | str, Condition | str)"
+                )
+            eval_ref, raw_condition = spec
+        else:
+            eval_ref, raw_condition = spec, always()
 
-    Args:
-        eval_ref: The eval to bind. Either an ``EvalFunction`` or a string
-            name (for cross-repo references).
-        when: CEL condition controlling when the eval runs. Accepts either a
-            :class:`Condition` helper value or a raw CEL expression string.
-            Defaults to ``always()``.
-
-    Returns:
-        A decorator that attaches eval binding metadata to the function.
-
-    Raises:
-        TypeError: If applied after ``@step`` (receives a ``StepFunction``
-            instead of a raw function).
-    """
-    condition = coerce_condition(when or always())
-
-    if isinstance(eval_ref, EvalFunction):
-        eval_name = eval_ref.eval_data.name
-    elif isinstance(eval_ref, str):
-        eval_name = eval_ref
-    else:
-        raise TypeError(
-            f"evaluated_by() expects an EvalFunction or string name, "
-            f"got {type(eval_ref).__name__}"
-        )
-
-    binding = EvalBindingData(
-        eval_name=eval_name,
-        condition=condition.to_cel(),
-    )
-
-    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-        # Import here to avoid circular import (step_data → eval_binding → step_function)
-        from bridge_sdk.step_function import StepFunction
-
-        if isinstance(func, StepFunction):
+        if isinstance(eval_ref, EvalFunction):
+            eval_name = eval_ref.eval_data.name
+        elif isinstance(eval_ref, str):
+            eval_name = eval_ref
+        else:
             raise TypeError(
-                "evaluated_by() must be applied before @step. "
-                "Reorder your decorators so @evaluated_by is below @step:\n\n"
-                "    @step\n"
-                "    @evaluated_by(...)\n"
-                "    def my_step(...): ..."
+                "eval_bindings entries must be EvalFunction | str or "
+                "tuple[EvalFunction | str, Condition | str], "
+                f"got {type(eval_ref).__name__}"
             )
 
-        bindings: list[EvalBindingData] = getattr(func, "_eval_bindings", [])
-        bindings.append(binding)
-        func._eval_bindings = bindings  # type: ignore[attr-defined]
-        return func
-
-    return decorator
+        condition = coerce_condition(raw_condition)
+        normalized.append(
+            EvalBindingData(
+                eval_name=eval_name,
+                condition=condition.to_cel(),
+            )
+        )
+    return normalized

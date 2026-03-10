@@ -324,7 +324,7 @@ def my_step(value: str) -> str:
 
 ## Evals
 
-Evals are quality measurement functions that automatically run when steps or pipelines complete. Define an eval with `@bridge_eval`, then bind it to a step with `@evaluated_by`.
+Evals are quality measurement functions that automatically run when steps or pipelines complete. Define an eval with `@bridge_eval`, then bind it on `@step`, `@pipeline.step`, or `Pipeline(...)` using `eval_bindings`.
 
 ### Defining an Eval
 
@@ -341,7 +341,7 @@ def quality_check(ctx: StepEvalContext[Any, Any]) -> EvalResult[QualityMetrics]:
     is_correct = ctx.step_output.answer == ctx.step_input.expected
     return EvalResult(
         metrics={"accuracy": 1.0 if is_correct else 0.0, "followed_format": True},
-        output="Looks good"  # Optional unstructured text
+        result="Looks good"  # Optional structured result value
     )
 ```
 
@@ -354,16 +354,17 @@ Use `Any` for generic evals that work with any step, or specific types for type-
 ### Binding Evals to Steps
 
 ```python
-from bridge_sdk import step, evaluated_by, on_branch, sample
+from bridge_sdk import step, on_branch, sample
 
-@step
-@evaluated_by(quality_check, when=on_branch("main"))
-@evaluated_by(llm_judge, when=on_branch("main") & sample(0.1))
+@step(
+    eval_bindings=[
+        (quality_check, on_branch("main")),
+        (llm_judge, on_branch("main") & sample(0.1)),
+    ]
+)
 def my_step(input: TaskInput) -> TaskOutput:
     ...
 ```
-
-**Important:** `@evaluated_by` must appear **below** `@step` (closer to the function). Python applies decorators bottom-up.
 
 ### Binding Evals to Pipelines
 
@@ -374,7 +375,7 @@ from bridge_sdk import Pipeline, always
 
 pipeline = Pipeline(
     name="my_pipeline",
-    evaluated_by=[(pipeline_quality, always())],
+    eval_bindings=[(pipeline_quality, always())],
 )
 ```
 
@@ -530,7 +531,7 @@ from bridge_sdk import (
     EvalResult,        # Return type for eval functions
     StepEvalContext,   # Context for step-level evals
     PipelineEvalContext, # Context for pipeline-level evals
-    evaluated_by,      # Decorator for binding evals to steps
+    EvalBindingSpec,   # Type alias for eval binding entries
     EvalBindingData,   # Pydantic model for eval binding metadata
     Condition,         # Base class for eval conditions
     always,            # Condition: always run

@@ -69,7 +69,7 @@ uv run bridge config get-dsl --modules my_project.steps --output-file /tmp/dsl.j
       "params_from_step_results": {"param": "upstream_step"},
       "credential_bindings": {},
       "eval_bindings": [
-        {"eval_name": "quality_check", "condition": {"type": "always"}}
+        {"eval_name": "quality_check", "condition": "true"}
       ],
       "file_path": "my_project/steps.py",
       "file_line_number": 15

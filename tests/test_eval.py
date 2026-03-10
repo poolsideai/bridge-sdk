@@ -33,7 +33,6 @@ from bridge_sdk import (
     StepEvalContext,
     PipelineEvalContext,
     bridge_eval,
-    evaluated_by,
     EvalBindingData,
     Condition,
     always,
@@ -260,17 +259,16 @@ class TestSchemaExtraction:
         assert "test_eval.py" in my_eval.eval_data.file_path
 
 
-# --- @evaluated_by binding tests ---
+# --- eval_bindings tests ---
 
 
-class TestEvaluatedBy:
+class TestEvalBindings:
     def test_binding_attaches_to_step(self):
         @bridge_eval
         def my_eval(ctx: StepEvalContext[Any, Any]) -> EvalResult[QualityMetrics]:
             return EvalResult(metrics={"accuracy": 1.0, "followed_format": True})
 
-        @step
-        @evaluated_by(my_eval, when=on_branch("main"))
+        @step(eval_bindings=[(my_eval, on_branch("main"))])
         def my_step(value: str) -> str:
             return value
 
@@ -288,9 +286,12 @@ class TestEvaluatedBy:
         def eval_b(ctx: StepEvalContext[Any, Any]) -> EvalResult[QualityMetrics]:
             return EvalResult(metrics={"accuracy": 1.0, "followed_format": True})
 
-        @step
-        @evaluated_by(eval_a, when=on_branch("main"))
-        @evaluated_by(eval_b, when=sample(0.1))
+        @step(
+            eval_bindings=[
+                (eval_a, on_branch("main")),
+                (eval_b, sample(0.1)),
+            ]
+        )
         def my_step(value: str) -> str:
             return value
 
@@ -303,44 +304,38 @@ class TestEvaluatedBy:
         def my_eval(ctx: StepEvalContext[Any, Any]) -> EvalResult[QualityMetrics]:
             return EvalResult(metrics={"accuracy": 1.0, "followed_format": True})
 
-        @step
-        @evaluated_by(my_eval)
+        @step(eval_bindings=[my_eval])
         def my_step(value: str) -> str:
             return value
 
         assert my_step.step_data.eval_bindings[0].condition == "true"
 
     def test_string_eval_ref(self):
-        @step
-        @evaluated_by("cross_repo_eval", when=always())
+        @step(eval_bindings=["cross_repo_eval"])
         def my_step(value: str) -> str:
             return value
 
         assert my_step.step_data.eval_bindings[0].eval_name == "cross_repo_eval"
 
-    def test_wrong_order_raises_error(self):
-        """@evaluated_by applied after @step should raise TypeError."""
+    def test_invalid_eval_ref_type(self):
+        with pytest.raises(TypeError, match="eval_bindings entries"):
 
-        @bridge_eval
-        def my_eval(ctx: StepEvalContext[Any, Any]) -> EvalResult[QualityMetrics]:
-            return EvalResult(metrics={"accuracy": 1.0, "followed_format": True})
-
-        with pytest.raises(TypeError, match="must be applied before @step"):
-
-            @evaluated_by(my_eval)
-            @step
+            @step(eval_bindings=[42])  # type: ignore[list-item]
             def my_step(value: str) -> str:
                 return value
 
-    def test_invalid_eval_ref_type(self):
-        with pytest.raises(TypeError, match="expects an EvalFunction or string"):
-            evaluated_by(42)  # type: ignore[arg-type]
+    def test_invalid_tuple_entry_shape(self):
+        with pytest.raises(TypeError, match="tuple eval binding entries"):
+
+            @step(eval_bindings=[("my_eval", "true", "extra")])  # type: ignore[list-item]
+            def my_step(value: str) -> str:
+                return value
 
 
-# --- Pipeline evaluated_by tests ---
+# --- Pipeline eval_bindings tests ---
 
 
-class TestPipelineEvaluatedBy:
+class TestPipelineEvalBindings:
     def test_pipeline_constructor_bindings(self):
         @bridge_eval
         def pipeline_eval(
@@ -350,7 +345,7 @@ class TestPipelineEvaluatedBy:
 
         pipeline = Pipeline(
             name="test_pipeline",
-            evaluated_by=[(pipeline_eval, always())],
+            eval_bindings=[(pipeline_eval, always())],
         )
 
         assert len(pipeline._eval_bindings) == 1
@@ -360,7 +355,7 @@ class TestPipelineEvaluatedBy:
     def test_pipeline_constructor_string_ref(self):
         pipeline = Pipeline(
             name="test_pipeline",
-            evaluated_by=[("remote_eval", on_branch("main"))],
+            eval_bindings=[("remote_eval", on_branch("main"))],
         )
 
         assert pipeline._eval_bindings[0].eval_name == "remote_eval"
@@ -391,8 +386,7 @@ class TestDSLOutput:
         def my_eval(ctx: StepEvalContext[Any, Any]) -> EvalResult[QualityMetrics]:
             return EvalResult(metrics={"accuracy": 1.0, "followed_format": True})
 
-        @step
-        @evaluated_by(my_eval, when=on_branch("main"))
+        @step(eval_bindings=[(my_eval, on_branch("main"))])
         def my_step(value: str) -> str:
             return value
 
@@ -914,8 +908,8 @@ class TestConditionJsonSerialization:
 
 
 class TestPipelineEvalIntegration:
-    def test_evaluated_by_on_pipeline_step(self):
-        """@evaluated_by should work with @pipeline.step too."""
+    def test_eval_bindings_on_pipeline_step(self):
+        """eval_bindings should work with @pipeline.step too."""
 
         @bridge_eval
         def my_eval(ctx: StepEvalContext[Any, Any]) -> EvalResult[QualityMetrics]:
@@ -923,8 +917,7 @@ class TestPipelineEvalIntegration:
 
         pipeline = Pipeline(name="test_pipeline")
 
-        @pipeline.step
-        @evaluated_by(my_eval, when=on_branch("main"))
+        @pipeline.step(eval_bindings=[(my_eval, on_branch("main"))])
         def my_step(value: str) -> str:
             return value
 
@@ -943,7 +936,7 @@ class TestPipelineEvalIntegration:
 
         pipeline = Pipeline(
             name="test_pipeline",
-            evaluated_by=[
+            eval_bindings=[
                 (eval_a, on_branch("main")),
                 (eval_b, sample(0.5)),
             ],
@@ -957,7 +950,7 @@ class TestPipelineEvalIntegration:
         with pytest.raises(TypeError, match="EvalFunction | str"):
             Pipeline(
                 name="test_pipeline",
-                evaluated_by=[(42, always())],  # type: ignore[list-item]
+                eval_bindings=[(42, always())],  # type: ignore[list-item]
             )
 
 
@@ -983,12 +976,15 @@ class TestFullDSLRoundtrip:
         pipeline = Pipeline(
             name="my_pipeline",
             description="Test pipeline",
-            evaluated_by=[(pipeline_eval, always())],
+            eval_bindings=[(pipeline_eval, always())],
         )
 
-        @pipeline.step
-        @evaluated_by(quality_check, when=on_branch("main"))
-        @evaluated_by("llm_judge", when=on_branch("main") & sample(0.1))
+        @pipeline.step(
+            eval_bindings=[
+                (quality_check, on_branch("main")),
+                ("llm_judge", on_branch("main") & sample(0.1)),
+            ]
+        )
         def my_step(value: str) -> str:
             return value
 

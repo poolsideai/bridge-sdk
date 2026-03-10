@@ -21,9 +21,7 @@ from typing import Any, Callable, Dict, List, Optional, overload
 from pydantic import BaseModel, Field
 from typing_extensions import ParamSpec, TypeVar
 
-from bridge_sdk.eval_binding import EvalBindingData
-from bridge_sdk.eval_conditions import Condition, coerce_condition
-from bridge_sdk.eval_function import EvalFunction
+from bridge_sdk.eval_binding import EvalBindingData, EvalBindingSpec, normalize_eval_bindings
 from bridge_sdk.models import SandboxDefinition
 from bridge_sdk.step_function import StepFunction, make_step_function
 
@@ -69,7 +67,7 @@ class Pipeline:
         name: str,
         rid: str | None = None,
         description: str | None = None,
-        evaluated_by: list[tuple[EvalFunction | str, Condition | str]] | None = None,
+        eval_bindings: list[EvalBindingSpec] | None = None,
     ):
         """Initialize a Pipeline.
 
@@ -79,33 +77,16 @@ class Pipeline:
                 backend will use this rid instead of generating a new one.
                 This enables renaming pipelines while preserving their identity.
             description: Optional human-readable description.
-            evaluated_by: Optional list of (eval, condition) tuples binding
-                evals to this pipeline. The condition may be a Condition helper
-                value or a raw CEL expression string.
+            eval_bindings: Optional eval bindings for this pipeline. Each entry
+                may be:
+                - EvalFunction | str (condition defaults to true)
+                - (EvalFunction | str, Condition | str)
         """
         self.name = name
         self.rid = rid
         self.description = description
 
-        self._eval_bindings: list[EvalBindingData] = []
-        if evaluated_by:
-            for eval_ref, raw_condition in evaluated_by:
-                if isinstance(eval_ref, EvalFunction):
-                    eval_name = eval_ref.eval_data.name
-                elif isinstance(eval_ref, str):
-                    eval_name = eval_ref
-                else:
-                    raise TypeError(
-                        f"evaluated_by entries must be (EvalFunction | str, Condition) tuples, "
-                        f"got eval_ref of type {type(eval_ref).__name__}"
-                    )
-                condition = coerce_condition(raw_condition)
-                self._eval_bindings.append(
-                    EvalBindingData(
-                        eval_name=eval_name,
-                        condition=condition.to_cel(),
-                    )
-                )
+        self._eval_bindings = normalize_eval_bindings(eval_bindings)
 
         # Auto-register this pipeline
         PIPELINE_REGISTRY[name] = self
@@ -123,6 +104,7 @@ class Pipeline:
         metadata: dict[str, Any] | None = ...,
         credential_bindings: dict[str, str] | None = ...,
         sandbox_definition: SandboxDefinition | None = ...,
+        eval_bindings: list[EvalBindingSpec] | None = ...,
     ) -> StepFunction[P, R]:
         """Overload for usage as @pipeline.step (no parentheses)."""
         ...
@@ -139,6 +121,7 @@ class Pipeline:
         metadata: dict[str, Any] | None = ...,
         credential_bindings: dict[str, str] | None = ...,
         sandbox_definition: SandboxDefinition | None = ...,
+        eval_bindings: list[EvalBindingSpec] | None = ...,
     ) -> Callable[[Callable[P, R]], StepFunction[P, R]]:
         """Overload for usage as @pipeline.step(...)"""
         ...
@@ -155,6 +138,7 @@ class Pipeline:
         metadata: dict[str, Any] | None = None,
         credential_bindings: dict[str, str] | None = None,
         sandbox_definition: SandboxDefinition | None = None,
+        eval_bindings: list[EvalBindingSpec] | None = None,
     ) -> StepFunction[P, R] | Callable[[Callable[P, R]], StepFunction[P, R]]:
         """Decorator for defining a step associated with this pipeline.
 
@@ -173,6 +157,7 @@ class Pipeline:
                 credential_bindings=credential_bindings,
                 pipeline_name=self.name,
                 sandbox_definition=sandbox_definition,
+                eval_bindings=eval_bindings,
             )
             return sf
 
