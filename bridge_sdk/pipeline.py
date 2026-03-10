@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 from typing_extensions import ParamSpec, TypeVar
 
 from bridge_sdk.eval_binding import EvalBindingData
-from bridge_sdk.eval_conditions import Condition, always
+from bridge_sdk.eval_conditions import Condition, coerce_condition
 from bridge_sdk.eval_function import EvalFunction
 from bridge_sdk.models import SandboxDefinition
 from bridge_sdk.step_function import StepFunction, make_step_function
@@ -69,7 +69,7 @@ class Pipeline:
         name: str,
         rid: str | None = None,
         description: str | None = None,
-        evaluated_by: list[tuple[EvalFunction | str, Condition]] | None = None,
+        evaluated_by: list[tuple[EvalFunction | str, Condition | str]] | None = None,
     ):
         """Initialize a Pipeline.
 
@@ -80,8 +80,8 @@ class Pipeline:
                 This enables renaming pipelines while preserving their identity.
             description: Optional human-readable description.
             evaluated_by: Optional list of (eval, condition) tuples binding
-                evals to this pipeline. Each tuple contains an EvalFunction
-                (or string name for cross-repo refs) and a Condition.
+                evals to this pipeline. The condition may be a Condition helper
+                value or a raw CEL expression string.
         """
         self.name = name
         self.rid = rid
@@ -89,7 +89,7 @@ class Pipeline:
 
         self._eval_bindings: list[EvalBindingData] = []
         if evaluated_by:
-            for eval_ref, condition in evaluated_by:
+            for eval_ref, raw_condition in evaluated_by:
                 if isinstance(eval_ref, EvalFunction):
                     eval_name = eval_ref.eval_data.name
                 elif isinstance(eval_ref, str):
@@ -99,10 +99,11 @@ class Pipeline:
                         f"evaluated_by entries must be (EvalFunction | str, Condition) tuples, "
                         f"got eval_ref of type {type(eval_ref).__name__}"
                     )
+                condition = coerce_condition(raw_condition)
                 self._eval_bindings.append(
                     EvalBindingData(
                         eval_name=eval_name,
-                        condition=condition.to_dict(),
+                        condition=condition.to_cel(),
                     )
                 )
 

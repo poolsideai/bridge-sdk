@@ -68,16 +68,16 @@ def clear_registries():
 
 class TestConditions:
     def test_always(self):
-        assert always().to_dict() == {"type": "always"}
+        assert always().to_cel() == "true"
 
     def test_never(self):
-        assert never().to_dict() == {"type": "never"}
+        assert never().to_cel() == "false"
 
     def test_on_branch(self):
-        assert on_branch("main").to_dict() == {"type": "branch", "branch": "main"}
+        assert on_branch("main").to_cel() == 'metadata.branch == "main"'
 
     def test_sample(self):
-        assert sample(0.1).to_dict() == {"type": "sample", "rate": 0.1}
+        assert sample(0.1).to_cel() == "sample_value < 0.1"
 
     def test_sample_validation(self):
         with pytest.raises(ValueError, match="between 0.0 and 1.0"):
@@ -86,69 +86,28 @@ class TestConditions:
             sample(-0.1)
 
     def test_sample_boundary_values(self):
-        assert sample(0.0).to_dict() == {"type": "sample", "rate": 0.0}
-        assert sample(1.0).to_dict() == {"type": "sample", "rate": 1.0}
+        assert sample(0.0).to_cel() == "sample_value < 0.0"
+        assert sample(1.0).to_cel() == "sample_value < 1.0"
 
     def test_and_combinator(self):
-        result = (on_branch("main") & sample(0.1)).to_dict()
-        assert result == {
-            "type": "and",
-            "conditions": [
-                {"type": "branch", "branch": "main"},
-                {"type": "sample", "rate": 0.1},
-            ],
-        }
+        result = (on_branch("main") & sample(0.1)).to_cel()
+        assert result == '(metadata.branch == "main") && (sample_value < 0.1)'
 
     def test_or_combinator(self):
-        result = (on_branch("main") | on_branch("staging")).to_dict()
-        assert result == {
-            "type": "or",
-            "conditions": [
-                {"type": "branch", "branch": "main"},
-                {"type": "branch", "branch": "staging"},
-            ],
-        }
+        result = (on_branch("main") | on_branch("staging")).to_cel()
+        assert result == '(metadata.branch == "main") || (metadata.branch == "staging")'
 
-    def test_nested_and_flattens(self):
-        """Chaining & should flatten, not nest."""
-        result = (on_branch("main") & sample(0.1) & always()).to_dict()
-        assert result == {
-            "type": "and",
-            "conditions": [
-                {"type": "branch", "branch": "main"},
-                {"type": "sample", "rate": 0.1},
-                {"type": "always"},
-            ],
-        }
+    def test_nested_and_composes(self):
+        result = (on_branch("main") & sample(0.1) & always()).to_cel()
+        assert result == '((metadata.branch == "main") && (sample_value < 0.1)) && (true)'
 
-    def test_nested_or_flattens(self):
-        """Chaining | should flatten, not nest."""
-        result = (on_branch("a") | on_branch("b") | on_branch("c")).to_dict()
-        assert result == {
-            "type": "or",
-            "conditions": [
-                {"type": "branch", "branch": "a"},
-                {"type": "branch", "branch": "b"},
-                {"type": "branch", "branch": "c"},
-            ],
-        }
+    def test_nested_or_composes(self):
+        result = (on_branch("a") | on_branch("b") | on_branch("c")).to_cel()
+        assert result == '((metadata.branch == "a") || (metadata.branch == "b")) || (metadata.branch == "c")'
 
     def test_mixed_and_or(self):
-        """Mixed & and | should nest correctly."""
-        result = ((on_branch("main") & sample(0.1)) | always()).to_dict()
-        assert result == {
-            "type": "or",
-            "conditions": [
-                {
-                    "type": "and",
-                    "conditions": [
-                        {"type": "branch", "branch": "main"},
-                        {"type": "sample", "rate": 0.1},
-                    ],
-                },
-                {"type": "always"},
-            ],
-        }
+        result = ((on_branch("main") & sample(0.1)) | always()).to_cel()
+        assert result == '((metadata.branch == "main") && (sample_value < 0.1)) || (true)'
 
 
 # --- @bridge_eval decorator tests ---
@@ -318,7 +277,7 @@ class TestEvaluatedBy:
         assert len(my_step.step_data.eval_bindings) == 1
         binding = my_step.step_data.eval_bindings[0]
         assert binding.eval_name == "my_eval"
-        assert binding.condition == {"type": "branch", "branch": "main"}
+        assert binding.condition == "metadata.branch == \"main\""
 
     def test_multiple_bindings(self):
         @bridge_eval
@@ -349,7 +308,7 @@ class TestEvaluatedBy:
         def my_step(value: str) -> str:
             return value
 
-        assert my_step.step_data.eval_bindings[0].condition == {"type": "always"}
+        assert my_step.step_data.eval_bindings[0].condition == "true"
 
     def test_string_eval_ref(self):
         @step
@@ -396,7 +355,7 @@ class TestPipelineEvaluatedBy:
 
         assert len(pipeline._eval_bindings) == 1
         assert pipeline._eval_bindings[0].eval_name == "pipeline_eval"
-        assert pipeline._eval_bindings[0].condition == {"type": "always"}
+        assert pipeline._eval_bindings[0].condition == "true"
 
     def test_pipeline_constructor_string_ref(self):
         pipeline = Pipeline(
@@ -445,12 +404,12 @@ class TestDSLOutput:
     def test_eval_binding_data_serialization(self):
         binding = EvalBindingData(
             eval_name="my_eval",
-            condition={"type": "branch", "branch": "main"},
+            condition="metadata.branch == \"main\"",
         )
         data = binding.model_dump()
         assert data == {
             "eval_name": "my_eval",
-            "condition": {"type": "branch", "branch": "main"},
+            "condition": "metadata.branch == \"main\"",
         }
 
 
@@ -912,43 +871,17 @@ class TestConditionJsonSerialization:
             (on_branch("main") & sample(0.1)) | always(),
         ]
         for c in conditions:
-            serialized = json.dumps(c.to_dict())
+            serialized = json.dumps(c.to_cel())
             roundtripped = json.loads(serialized)
-            assert roundtripped == c.to_dict()
+            assert roundtripped == c.to_cel()
 
     def test_and_inside_or_does_not_flatten(self):
-        """An AndCondition used inside | should stay nested."""
-        result = ((on_branch("a") & on_branch("b")) | on_branch("c")).to_dict()
-        assert result == {
-            "type": "or",
-            "conditions": [
-                {
-                    "type": "and",
-                    "conditions": [
-                        {"type": "branch", "branch": "a"},
-                        {"type": "branch", "branch": "b"},
-                    ],
-                },
-                {"type": "branch", "branch": "c"},
-            ],
-        }
+        result = ((on_branch("a") & on_branch("b")) | on_branch("c")).to_cel()
+        assert result == '((metadata.branch == "a") && (metadata.branch == "b")) || (metadata.branch == "c")'
 
     def test_or_inside_and_does_not_flatten(self):
-        """An OrCondition used inside & should stay nested."""
-        result = ((on_branch("a") | on_branch("b")) & on_branch("c")).to_dict()
-        assert result == {
-            "type": "and",
-            "conditions": [
-                {
-                    "type": "or",
-                    "conditions": [
-                        {"type": "branch", "branch": "a"},
-                        {"type": "branch", "branch": "b"},
-                    ],
-                },
-                {"type": "branch", "branch": "c"},
-            ],
-        }
+        result = ((on_branch("a") | on_branch("b")) & on_branch("c")).to_cel()
+        assert result == '((metadata.branch == "a") || (metadata.branch == "b")) && (metadata.branch == "c")'
 
 
 # --- Pipeline and step integration ---
@@ -1079,8 +1012,7 @@ class TestFullDSLRoundtrip:
         llm_binding = next(
             b for b in step_data["eval_bindings"] if b["eval_name"] == "llm_judge"
         )
-        assert llm_binding["condition"]["type"] == "and"
-        assert len(llm_binding["condition"]["conditions"]) == 2
+        assert llm_binding["condition"] == "(metadata.branch == \"main\") && (sample_value < 0.1)"
 
         # Pipeline with eval bindings
         assert "my_pipeline" in parsed["pipelines"]

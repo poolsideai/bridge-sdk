@@ -16,11 +16,11 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable
 
 from pydantic import BaseModel
 
-from bridge_sdk.eval_conditions import Condition, always
+from bridge_sdk.eval_conditions import Condition, always, coerce_condition
 from bridge_sdk.eval_function import EvalFunction
 
 
@@ -30,14 +30,14 @@ class EvalBindingData(BaseModel):
     eval_name: str
     """The name of the eval to run."""
 
-    condition: Dict[str, Any]
-    """Serialized condition tree controlling when the eval runs."""
+    condition: str
+    """CEL expression controlling when the eval runs."""
 
 
 def evaluated_by(
     eval_ref: EvalFunction | str,
     *,
-    when: Condition | None = None,
+    when: Condition | str | None = None,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Decorator that binds an eval to a step or pipeline.
 
@@ -51,8 +51,9 @@ def evaluated_by(
     Args:
         eval_ref: The eval to bind. Either an ``EvalFunction`` or a string
             name (for cross-repo references).
-        when: Condition controlling when the eval runs. Defaults to
-            ``always()``.
+        when: CEL condition controlling when the eval runs. Accepts either a
+            :class:`Condition` helper value or a raw CEL expression string.
+            Defaults to ``always()``.
 
     Returns:
         A decorator that attaches eval binding metadata to the function.
@@ -61,7 +62,7 @@ def evaluated_by(
         TypeError: If applied after ``@step`` (receives a ``StepFunction``
             instead of a raw function).
     """
-    condition = when or always()
+    condition = coerce_condition(when or always())
 
     if isinstance(eval_ref, EvalFunction):
         eval_name = eval_ref.eval_data.name
@@ -75,7 +76,7 @@ def evaluated_by(
 
     binding = EvalBindingData(
         eval_name=eval_name,
-        condition=condition.to_dict(),
+        condition=condition.to_cel(),
     )
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:

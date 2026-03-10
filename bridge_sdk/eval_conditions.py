@@ -12,127 +12,75 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Composable conditions for controlling when evals run."""
+"""Composable CEL conditions for controlling when evals run."""
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
-from typing import Any
+import json
 
 
-class Condition(ABC):
-    """Base class for eval execution conditions.
+def _to_cel_string_literal(value: str) -> str:
+    return json.dumps(value)
 
-    Conditions control when an eval is executed. They can be combined
-    using ``&`` (and) and ``|`` (or) operators::
+
+class Condition:
+    """CEL expression wrapper with composition helpers.
+
+    Conditions can be combined using ``&`` (and) and ``|`` (or)::
 
         on_branch("main") & sample(0.1)
         on_branch("main") | on_branch("staging")
     """
 
-    @abstractmethod
-    def to_dict(self) -> dict[str, Any]:
-        """Serialize this condition to a JSON-compatible dict."""
-        ...
+    def __init__(self, expression: str) -> None:
+        if expression == "":
+            raise ValueError("condition expression must not be empty")
+        self._expression = expression
 
-    def __and__(self, other: Condition) -> Condition:
-        left = self._flat_conditions("and")
-        right = other._flat_conditions("and")
-        return _AndCondition(left + right)
+    def to_cel(self) -> str:
+        return self._expression
 
-    def __or__(self, other: Condition) -> Condition:
-        left = self._flat_conditions("or")
-        right = other._flat_conditions("or")
-        return _OrCondition(left + right)
+    def __str__(self) -> str:
+        return self._expression
 
-    def _flat_conditions(self, kind: str) -> list[Condition]:
-        """Return a flat list of conditions for combining.
+    def __and__(self, other: Condition | str) -> Condition:
+        rhs = coerce_condition(other)
+        return Condition(f"({self.to_cel()}) && ({rhs.to_cel()})")
 
-        If this condition is already the same combinator kind, return its
-        children to avoid unnecessary nesting.
-        """
-        return [self]
+    def __or__(self, other: Condition | str) -> Condition:
+        rhs = coerce_condition(other)
+        return Condition(f"({self.to_cel()}) || ({rhs.to_cel()})")
 
 
-class _AlwaysCondition(Condition):
-    def to_dict(self) -> dict[str, Any]:
-        return {"type": "always"}
-
-
-class _NeverCondition(Condition):
-    def to_dict(self) -> dict[str, Any]:
-        return {"type": "never"}
-
-
-class _BranchCondition(Condition):
-    def __init__(self, branch: str) -> None:
-        self.branch = branch
-
-    def to_dict(self) -> dict[str, Any]:
-        return {"type": "branch", "branch": self.branch}
-
-
-class _SampleCondition(Condition):
-    def __init__(self, rate: float) -> None:
-        if not 0.0 <= rate <= 1.0:
-            raise ValueError(f"sample rate must be between 0.0 and 1.0, got {rate}")
-        self.rate = rate
-
-    def to_dict(self) -> dict[str, Any]:
-        return {"type": "sample", "rate": self.rate}
-
-
-class _AndCondition(Condition):
-    def __init__(self, conditions: list[Condition]) -> None:
-        self.conditions = conditions
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "type": "and",
-            "conditions": [c.to_dict() for c in self.conditions],
-        }
-
-    def _flat_conditions(self, kind: str) -> list[Condition]:
-        if kind == "and":
-            return list(self.conditions)
-        return [self]
-
-
-class _OrCondition(Condition):
-    def __init__(self, conditions: list[Condition]) -> None:
-        self.conditions = conditions
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "type": "or",
-            "conditions": [c.to_dict() for c in self.conditions],
-        }
-
-    def _flat_conditions(self, kind: str) -> list[Condition]:
-        if kind == "or":
-            return list(self.conditions)
-        return [self]
+def coerce_condition(condition: Condition | str) -> Condition:
+    if isinstance(condition, Condition):
+        return condition
+    if isinstance(condition, str):
+        return Condition(condition)
+    raise TypeError(f"condition must be Condition or str, got {type(condition).__name__}")
 
 
 def always() -> Condition:
     """Condition that always passes. This is the default."""
-    return _AlwaysCondition()
+    return Condition("true")
 
 
 def never() -> Condition:
     """Condition that never passes."""
-    return _NeverCondition()
+    return Condition("false")
 
 
 def on_branch(branch: str) -> Condition:
     """Condition that passes when executing on the given branch."""
-    return _BranchCondition(branch)
+    return Condition(f"metadata.branch == {_to_cel_string_literal(branch)}")
 
 
 def sample(rate: float) -> Condition:
-    """Condition that passes for a random sample of executions.
+    """Condition that passes for a deterministic sample of executions.
 
     Args:
         rate: Sampling rate between 0.0 and 1.0 (e.g., 0.1 = 10%).
     """
-    return _SampleCondition(rate)
+    if not 0.0 <= rate <= 1.0:
+        raise ValueError(f"sample rate must be between 0.0 and 1.0, got {rate}")
+    return Condition(f"sample_value < {rate!r}")
