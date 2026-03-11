@@ -20,6 +20,7 @@ from typing import Any, Callable, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 from bridge_sdk.annotations import extract_step_result_annotation
+from bridge_sdk.eval_binding import EvalBindingData, EvalBindingSpec, normalize_eval_bindings
 from bridge_sdk.function_schema import FunctionSchema
 from bridge_sdk.models import SandboxDefinition
 from bridge_sdk.utils import get_relative_path
@@ -57,6 +58,8 @@ class StepData(BaseModel):
     """A dictionary mapping credential UUIDs (from Bridge) to environment variable names. The key is the credential ID (UUID) registered in Bridge, and the value is the environment variable name the credential will be exposed as."""
     sandbox_definition: Optional[SandboxDefinition] = None
     """Inline sandbox definition for this step. If provided, the step will use this sandbox configuration instead of the build-level default."""
+    eval_bindings: List[EvalBindingData] = Field(default_factory=list)
+    """Eval bindings attached to this step."""
 
 
 def create_step_data(
@@ -71,6 +74,7 @@ def create_step_data(
     credential_bindings: dict[str, str] | None = None,
     pipeline_name: str | None = None,
     sandbox_definition: SandboxDefinition | None = None,
+    eval_bindings: list[EvalBindingSpec] | None = None,
 ) -> StepData:
     """Create a StepData object from a step function.
 
@@ -88,6 +92,7 @@ def create_step_data(
         credential_bindings: Optional credential bindings.
         pipeline_name: Optional pipeline name this step belongs to.
         sandbox_definition: Optional inline sandbox definition for this step.
+        eval_bindings: Optional eval bindings configured on this step.
 
     Returns:
         A StepData object with all metadata.
@@ -127,4 +132,5 @@ def create_step_data(
         params_from_step_results=params_from_step_results_dict,
         credential_bindings=credential_bindings,
         sandbox_definition=sandbox_definition,
+        eval_bindings=normalize_eval_bindings(eval_bindings),
     )
