@@ -17,7 +17,6 @@
 import json
 import tempfile
 from pathlib import Path
-from datetime import timezone
 
 import pytest
 from typing import Any
@@ -43,7 +42,6 @@ from bridge_sdk import (
     Pipeline,
 )
 from bridge_sdk.eval_function import (
-    _parse_datetime,
     _build_step_eval_context,
     _build_pipeline_eval_context,
     _serialize_eval_result,
@@ -158,7 +156,6 @@ class TestBridgeEvalDecorator:
             step_input=None,
             step_output=None,
             trajectory=None,
-            metadata=None,
         )
         result = my_eval(ctx)
         assert isinstance(result, EvalResult)
@@ -721,30 +718,6 @@ class TestOnInvokeEval:
 
 
 class TestInternalHelpers:
-    def test_parse_datetime_from_string(self):
-        dt = _parse_datetime("2026-03-05T10:30:00")
-        from datetime import datetime
-        assert isinstance(dt, datetime)
-        assert dt.year == 2026
-
-    def test_parse_datetime_passthrough(self):
-        from datetime import datetime
-        original = datetime(2026, 1, 1)
-        assert _parse_datetime(original) is original
-
-    def test_parse_datetime_invalid_type(self):
-        with pytest.raises(TypeError, match="Cannot parse datetime"):
-            _parse_datetime(12345)
-
-    def test_parse_datetime_rfc3339_z(self):
-        dt = _parse_datetime("2026-03-05T10:30:00Z")
-        assert dt.tzinfo is not None
-        assert dt.utcoffset() == timezone.utc.utcoffset(dt)
-
-    def test_parse_datetime_rfc3339_nanos(self):
-        dt = _parse_datetime("2026-03-05T10:30:00.123456789Z")
-        assert dt.microsecond == 123456
-
     def test_build_step_context_with_partial_metadata(self):
         ctx = _build_step_eval_context({
             "step_name": "my_step",
@@ -765,6 +738,19 @@ class TestInternalHelpers:
         })
         assert ctx.metadata.branch == ""
         assert ctx.metadata.step_rid == ""
+
+    def test_build_step_context_parses_rfc3339(self):
+        ctx = _build_step_eval_context({
+            "step_name": "my_step",
+            "step_input": None,
+            "step_output": None,
+            "metadata": {
+                "started_at": "2026-03-05T10:30:00.123456789Z",
+                "completed_at": "2026-03-05T10:31:00Z",
+            },
+        })
+        assert ctx.metadata.started_at.tzinfo is not None
+        assert ctx.metadata.started_at.microsecond == 123456
 
     def test_build_pipeline_context_no_metadata(self):
         ctx = _build_pipeline_eval_context({
@@ -824,9 +810,10 @@ class TestInternalHelpers:
         }
 
     def test_serialize_eval_result_invalid_result_type_raises(self):
-        result = EvalResult(metrics={"score": 1.0}, result=["bad"])  # type: ignore[arg-type]
-        with pytest.raises(TypeError, match="result"):
-            _serialize_eval_result(result)
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            EvalResult(metrics={"score": 1.0}, result=["bad"])  # type: ignore[arg-type]
 
 
 # --- Type extraction edge cases ---
@@ -1000,7 +987,7 @@ class TestFullDSLRoundtrip:
                 name=p.name,
                 rid=p.rid,
                 description=p.description,
-                eval_bindings=getattr(p, "_eval_bindings", []),
+                eval_bindings=p._eval_bindings,
             ).model_dump()
             for pname, p in PIPELINE_REGISTRY.items()
         }

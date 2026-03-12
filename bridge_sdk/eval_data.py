@@ -64,6 +64,18 @@ def _is_subclass_safe(tp: Any, target: type) -> bool:
         return False
 
 
+def _get_generic_origin_and_args(tp: Any) -> tuple[Any, tuple[Any, ...]]:
+    """Get generic origin/args for typing and pydantic generic aliases."""
+    origin = get_origin(tp)
+    args = get_args(tp)
+    if origin is None and not args:
+        meta = getattr(tp, "__pydantic_generic_metadata__", None)
+        if meta:
+            origin = meta.get("origin")
+            args = tuple(meta.get("args", ()))
+    return origin, args
+
+
 def _is_any(tp: Any) -> bool:
     """Check if a type is Any."""
     return tp is Any
@@ -106,7 +118,7 @@ def _extract_eval_type_info(
         )
 
     # Determine context_type from the origin of the generic
-    origin = get_origin(ctx_hint)
+    origin, ctx_args = _get_generic_origin_and_args(ctx_hint)
     if _is_subclass_safe(origin, StepEvalContext) or _is_subclass_safe(ctx_hint, StepEvalContext):
         context_type = "step"
     elif _is_subclass_safe(origin, PipelineEvalContext) or _is_subclass_safe(ctx_hint, PipelineEvalContext):
@@ -119,7 +131,6 @@ def _extract_eval_type_info(
         )
 
     # Extract I, O from the generic parameters
-    ctx_args = get_args(ctx_hint)
     if ctx_args and len(ctx_args) >= 2:
         input_type, output_type = ctx_args[0], ctx_args[1]
     else:
@@ -133,9 +144,8 @@ def _extract_eval_type_info(
     metrics_schema: dict[str, Any] = {}
 
     if return_hint is not None:
-        ret_origin = get_origin(return_hint)
+        ret_origin, ret_args = _get_generic_origin_and_args(return_hint)
         if _is_subclass_safe(ret_origin, EvalResult) or _is_subclass_safe(return_hint, EvalResult):
-            ret_args = get_args(return_hint)
             if ret_args:
                 metrics_type = ret_args[0]
                 if not _is_any(metrics_type):

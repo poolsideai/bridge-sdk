@@ -16,9 +16,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Generic, TypeVar
+
+from pydantic import BaseModel, Field
 
 I = TypeVar("I")
 O = TypeVar("O")
@@ -27,8 +28,11 @@ M = TypeVar("M")
 EvalResultValue = bool | float | str
 
 
-@dataclass
-class EvalResult(Generic[M]):
+def _default_epoch() -> datetime:
+    return datetime.fromtimestamp(0, tz=timezone.utc)
+
+
+class EvalResult(BaseModel, Generic[M]):
     """Result returned by an eval function.
 
     Args:
@@ -41,23 +45,21 @@ class EvalResult(Generic[M]):
     result: EvalResultValue | None = None
 
 
-@dataclass
-class StepMetadata:
+class StepMetadata(BaseModel):
     """Metadata about the step execution being evaluated."""
 
-    step_rid: str
-    step_version_id: str
-    execution_id: str
-    repository: str
-    branch: str
-    commit_sha: str
-    started_at: datetime
-    completed_at: datetime
-    duration_ms: int
+    step_rid: str = ""
+    step_version_id: str = ""
+    execution_id: str = ""
+    repository: str = ""
+    branch: str = ""
+    commit_sha: str = ""
+    started_at: datetime = Field(default_factory=_default_epoch)
+    completed_at: datetime = Field(default_factory=_default_epoch)
+    duration_ms: int = 0
 
 
-@dataclass
-class StepEvalContext(Generic[I, O]):
+class StepEvalContext(BaseModel, Generic[I, O]):
     """Context provided to step-level eval functions.
 
     Args:
@@ -68,42 +70,39 @@ class StepEvalContext(Generic[I, O]):
         metadata: Execution metadata (rid, branch, timing, etc.).
     """
 
-    step_name: str
+    step_name: str = ""
     step_input: I
     step_output: O
-    trajectory: Any | None
-    metadata: StepMetadata
+    trajectory: Any | None = None
+    metadata: StepMetadata = Field(default_factory=StepMetadata)
 
 
-@dataclass
-class StepResult:
+class StepResult(BaseModel):
     """Result of an individual step within a pipeline evaluation."""
 
-    step_name: str
-    input: Any
-    output: Any
-    trajectory: Any | None
-    duration_ms: int
-    success: bool
+    step_name: str = ""
+    input: Any = None
+    output: Any = None
+    trajectory: Any | None = None
+    duration_ms: int = 0
+    success: bool = True
 
 
-@dataclass
-class PipelineMetadata:
+class PipelineMetadata(BaseModel):
     """Metadata about the pipeline execution being evaluated."""
 
-    pipeline_rid: str
-    pipeline_version_id: str
-    run_id: str
-    repository: str
-    branch: str
-    commit_sha: str
-    started_at: datetime
-    completed_at: datetime
-    duration_ms: int
+    pipeline_rid: str = ""
+    pipeline_version_id: str = ""
+    run_id: str = ""
+    repository: str = ""
+    branch: str = ""
+    commit_sha: str = ""
+    started_at: datetime = Field(default_factory=_default_epoch)
+    completed_at: datetime = Field(default_factory=_default_epoch)
+    duration_ms: int = 0
 
 
-@dataclass
-class PipelineEvalContext(Generic[I, O]):
+class PipelineEvalContext(BaseModel, Generic[I, O]):
     """Context provided to pipeline-level eval functions.
 
     Args:
@@ -114,8 +113,8 @@ class PipelineEvalContext(Generic[I, O]):
         metadata: Execution metadata (rid, branch, timing, etc.).
     """
 
-    pipeline_name: str
+    pipeline_name: str = ""
     pipeline_input: I
     pipeline_output: O
-    steps: dict[str, StepResult] = field(default_factory=dict)
+    steps: dict[str, StepResult] = Field(default_factory=dict)
     metadata: PipelineMetadata | None = None
