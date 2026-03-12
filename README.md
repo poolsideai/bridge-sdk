@@ -155,7 +155,7 @@ This keeps your `tool.bridge` config short, but you must remember to update `__i
 | `bridge check` | Validate project setup |
 | `bridge config get-dsl` | Export step, pipeline, and eval definitions as JSON |
 | `bridge run --step <name> --input <json> --results <json>` | Execute a step |
-| `bridge run-eval --eval <name> --context <json>` | Execute an eval |
+| `bridge eval run --eval <name> --context <json>` | Execute an eval |
 
 ### Options
 
@@ -170,7 +170,7 @@ This keeps your `tool.bridge` config short, but you must remember to update `__i
 - `--results-file` - Path to results JSON file
 - `--output-file` - Write result to file
 
-**`run-eval`:**
+**`eval run`:**
 - `--eval` - Eval name (required)
 - `--context` - Context JSON string, or `@filepath` to read from file (required)
 - `--output-file` - Write result to file
@@ -400,7 +400,7 @@ on_branch("main") | on_branch("staging")   # Either passes
 ### Running Evals Locally
 
 ```bash
-uv run bridge run-eval \
+uv run bridge eval run \
   --eval quality_check \
   --context '{"step_name": "my_step", "step_input": {...}, "step_output": {...}, "metadata": {}}' \
   --output-file /tmp/eval_result.json

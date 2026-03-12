@@ -5,7 +5,7 @@ description: >
   creating pipeline steps, defining step dependencies (DAGs), integrating agents into
   pipelines, configuring credential bindings, defining evals for quality measurement,
   setting up pyproject.toml for Bridge, or working with the Bridge CLI (bridge check,
-  bridge config get-dsl, bridge run, bridge run-eval). Also use when connecting
+  bridge config get-dsl, bridge run, bridge eval run). Also use when connecting
   pipelines to the Poolside web interface via repository indexing and build execution.
 ---
 
@@ -221,7 +221,7 @@ See [references/evals.md](references/evals.md) for the full evals reference incl
 | `bridge check` | Validate pyproject.toml and discover steps |
 | `bridge config get-dsl` | Generate JSON DSL of all pipelines, steps, and evals |
 | `bridge run --step NAME --input JSON --results JSON` | Execute a single step locally |
-| `bridge run-eval --eval NAME --context JSON` | Execute a single eval locally |
+| `bridge eval run --eval NAME --context JSON` | Execute a single eval locally |
 
 See [references/cli.md](references/cli.md) for full CLI details.
 
