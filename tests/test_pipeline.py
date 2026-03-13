@@ -878,7 +878,7 @@ class TestPipelineWebhookPipelineActions:
                 name=pipeline.name,
                 rid=pipeline.rid,
                 description=pipeline.description,
-                webhooks=pipeline.webhooks or None,
+                webhooks=pipeline.webhooks,
             ).model_dump()
         }
 
