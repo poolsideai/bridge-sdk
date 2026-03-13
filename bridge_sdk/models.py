@@ -91,26 +91,26 @@ class WebhookPipelineAction(BaseModel):
         name: Unique name for this webhook action within the pipeline + branch.
         branch: The git branch this webhook is indexed from and whose pipeline
             code runs when it fires.
-        webhook_endpoint: Name of the webhook endpoint configured in Console
-            (e.g. ``"linear_issues"``).
         on: CEL expression evaluated against the payload and headers.
             Must return bool. The action triggers only when this evaluates to true.
         transform: CEL expression that transforms the payload into step inputs.
             Must return ``map(string, map(string, dyn))`` keyed by step name.
+        webhook_endpoint: Name of the webhook endpoint configured in Console
+            (e.g. ``"linear_issues"``).
 
     Example::
 
-        from bridge_sdk import Pipeline, Webhook
+        from bridge_sdk import Pipeline, WebhookPipelineAction
 
         pipeline = Pipeline(
             name="on_issue_update",
             webhooks=[
-                Webhook(
+                WebhookPipelineAction(
                     name="linear-issues",
                     branch="main",
-                    webhook_endpoint="linear_issues",
                     on='payload.type == "Issue" && payload.action == "update"',
                     transform='{"triage_step": {"issue": payload.data}}',
+                    webhook_endpoint="linear_issues",
                 ),
             ],
         )
@@ -122,14 +122,14 @@ class WebhookPipelineAction(BaseModel):
     branch: str
     """The git branch this webhook is indexed from and whose pipeline code runs when it fires."""
 
-    webhook_endpoint: str
-    """Name of the webhook endpoint configured in Console."""
-
     on: str
     """CEL expression that determines whether this action should fire. Must return bool."""
 
     transform: str
     """CEL expression that transforms the payload into step inputs. Must return map(string, map(string, dyn))."""
+
+    webhook_endpoint: str
+    """Name of the webhook endpoint configured in Console."""
 
 
 class ImageURLContent(BaseModel):

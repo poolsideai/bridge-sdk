@@ -35,13 +35,13 @@ pipeline = Pipeline(
         WebhookPipelineAction(
             name="custom-alerts",
             branch="staging",
-            webhook_endpoint="monitoring_alerts",
             on='payload.status == "firing" && payload.severity == "critical"',
             transform=(
                 '{"handle_alert": {"alert_id": payload.alert_id,'
                 ' "service": payload.service,'
                 ' "message": payload.message}}'
             ),
+            webhook_endpoint="monitoring_alerts",
         ),
     ],
 )

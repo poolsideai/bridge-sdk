@@ -57,7 +57,6 @@ pipeline = Pipeline(
         WebhookPipelineAction(
             name="linear-autofix",
             branch="main",
-            webhook_endpoint="linear_issues",
             on=(
                 'payload.type == "Issue"'
                 ' && payload.action == "create"'
@@ -66,6 +65,7 @@ pipeline = Pipeline(
             transform=(
                 '{"fetch_issue": {"issue_id": payload.data.id, "title": payload.data.title}}'
             ),
+            webhook_endpoint="linear_issues",
         ),
         # GitHub: trigger on pull request opened against main.
         # Using "production" means this webhook is only indexed from the
@@ -74,7 +74,6 @@ pipeline = Pipeline(
         WebhookPipelineAction(
             name="github-pr-opened",
             branch="production",
-            webhook_endpoint="github_prs",
             on=(
                 'headers["x-github-event"] == "pull_request"'
                 ' && payload.action == "opened"'
@@ -84,6 +83,7 @@ pipeline = Pipeline(
                 '{"fetch_issue": {"issue_id": payload.pull_request.head.sha,'
                 ' "title": payload.pull_request.title}}'
             ),
+            webhook_endpoint="github_prs",
         ),
     ],
 )

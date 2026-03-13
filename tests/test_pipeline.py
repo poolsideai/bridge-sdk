@@ -673,9 +673,9 @@ class TestWebhookPipelineActionModel:
         wh = WebhookPipelineAction(
             name="my-hook",
             branch="main",
-            webhook_endpoint="linear_issues",
             on="true",
             transform='{"triage_step": {"issue_url": payload.data.url}}',
+            webhook_endpoint="linear_issues",
         )
         assert wh.name == "my-hook"
         assert wh.branch == "main"
@@ -688,9 +688,9 @@ class TestWebhookPipelineActionModel:
         wh = WebhookPipelineAction(
             name="serial-hook",
             branch="main",
-            webhook_endpoint="stripe_invoices",
             on='payload.type == "invoice.paid"',
             transform='{"billing_step": {"invoice_id": payload.data.object.id, "amount": payload.data.object.amount_paid}}',
+            webhook_endpoint="stripe_invoices",
         )
         dumped = wh.model_dump()
         assert dumped["name"] == "serial-hook"
@@ -714,9 +714,9 @@ class TestPipelineWebhookPipelineActions:
             WebhookPipelineAction(
                 name="on-push",
                 branch="main",
-                webhook_endpoint="github_pushes",
                 on='payload.ref == "refs/heads/main"',
                 transform='{"index_step": {"repo": payload.repository.full_name, "commit_sha": payload.head_commit.id}}',
+                webhook_endpoint="github_pushes",
             ),
         ]
         pipeline = Pipeline(name="webhook_pipeline", webhooks=webhooks)
@@ -735,9 +735,9 @@ class TestPipelineWebhookPipelineActions:
             WebhookPipelineAction(
                 name="hook-a",
                 branch="main",
-                webhook_endpoint="linear_issues",
                 on="true",
                 transform='{"triage_step": {"issue_id": payload.data.id}}',
+                webhook_endpoint="linear_issues",
             ),
         ]
         Pipeline(name="reg_webhook_pipeline", webhooks=webhooks)
@@ -752,19 +752,82 @@ class TestPipelineWebhookPipelineActions:
             WebhookPipelineAction(
                 name="linear-hook",
                 branch="main",
-                webhook_endpoint="linear_issues",
                 on='payload.type == "Issue"',
                 transform='{"triage_step": {"issue_id": payload.data.id, "title": payload.data.title}}',
+                webhook_endpoint="linear_issues",
             ),
             WebhookPipelineAction(
                 name="github-hook",
                 branch="main",
-                webhook_endpoint="github_prs",
                 on='payload.action == "opened"',
                 transform='{"review_step": {"pr_number": payload.pull_request.number, "head_sha": payload.pull_request.head.sha}}',
+                webhook_endpoint="github_prs",
             ),
         ]
         pipeline = Pipeline(name="multi_hook_pipeline", webhooks=webhooks)
+        assert len(pipeline.webhooks) == 2
+
+    def test_pipeline_duplicate_webhook_rejected(self):
+        """Test that duplicate (webhook_endpoint, name) raises ValueError."""
+        webhooks = [
+            WebhookPipelineAction(
+                name="hook-a",
+                branch="main",
+                on="true",
+                transform='{"step": {"k": "v"}}',
+                webhook_endpoint="linear_issues",
+            ),
+            WebhookPipelineAction(
+                name="hook-a",
+                branch="main",
+                on="true",
+                transform='{"step": {"k": "v"}}',
+                webhook_endpoint="linear_issues",
+            ),
+        ]
+        with pytest.raises(ValueError, match="Duplicate webhook action"):
+            Pipeline(name="dup_pipeline", webhooks=webhooks)
+
+    def test_pipeline_same_name_different_endpoint_allowed(self):
+        """Test that same name on different endpoints is allowed."""
+        webhooks = [
+            WebhookPipelineAction(
+                name="hook-a",
+                branch="main",
+                on="true",
+                transform='{"step": {"k": "v"}}',
+                webhook_endpoint="linear_issues",
+            ),
+            WebhookPipelineAction(
+                name="hook-a",
+                branch="main",
+                on="true",
+                transform='{"step": {"k": "v"}}',
+                webhook_endpoint="github_prs",
+            ),
+        ]
+        pipeline = Pipeline(name="diff_endpoint_pipeline", webhooks=webhooks)
+        assert len(pipeline.webhooks) == 2
+
+    def test_pipeline_same_endpoint_different_name_allowed(self):
+        """Test that same endpoint with different names is allowed."""
+        webhooks = [
+            WebhookPipelineAction(
+                name="hook-a",
+                branch="main",
+                on='payload.action == "create"',
+                transform='{"step": {"k": "v"}}',
+                webhook_endpoint="linear_issues",
+            ),
+            WebhookPipelineAction(
+                name="hook-b",
+                branch="main",
+                on='payload.action == "update"',
+                transform='{"step": {"k": "v"}}',
+                webhook_endpoint="linear_issues",
+            ),
+        ]
+        pipeline = Pipeline(name="diff_name_pipeline", webhooks=webhooks)
         assert len(pipeline.webhooks) == 2
 
     def test_pipeline_data_with_webhooks(self):
@@ -773,9 +836,9 @@ class TestPipelineWebhookPipelineActions:
             WebhookPipelineAction(
                 name="data-hook",
                 branch="main",
-                webhook_endpoint="slack_events",
                 on='payload.type == "message"',
                 transform='{"chat_step": {"channel": payload.channel, "text": payload.text}}',
+                webhook_endpoint="slack_events",
             ),
         ]
         data = PipelineData(
@@ -803,9 +866,9 @@ class TestPipelineWebhookPipelineActions:
             WebhookPipelineAction(
                 name="dsl-hook",
                 branch="main",
-                webhook_endpoint="grafana_alerts",
                 on='payload.state == "alerting"',
                 transform='{"alert_step": {"alertname": payload.alerts[0].labels.alertname, "severity": payload.alerts[0].labels.severity}}',
+                webhook_endpoint="grafana_alerts",
             ),
         ]
         pipeline = Pipeline(name="dsl_webhook_pipeline", webhooks=webhooks)
@@ -845,9 +908,9 @@ class TestPipelineWebhookPipelineActions:
             WebhookPipelineAction(
                 name="repr-hook",
                 branch="main",
-                webhook_endpoint="linear_issues",
                 on="true",
                 transform='{"process_step": {"issue_url": payload.data.url}}',
+                webhook_endpoint="linear_issues",
             ),
         ]
         pipeline = Pipeline(name="repr_webhook_test", webhooks=webhooks)

@@ -187,16 +187,16 @@ pipeline = Pipeline(
         WebhookPipelineAction(
             name="linear-issues",
             branch="main",
-            webhook_endpoint="linear_issues",
             on='payload.type == "Issue" && payload.action == "update"',
             transform='{"triage_step": {"issue_id": payload.data.id, "title": payload.data.title}}',
+            webhook_endpoint="linear_issues",
         ),
         WebhookPipelineAction(
             name="github-push",
             branch="production",
-            webhook_endpoint="github_pushes",
             on='payload.ref == "refs/heads/main"',
             transform='{"index_step": {"repo": payload.repository.full_name, "commit_sha": payload.head_commit.id}}',
+            webhook_endpoint="github_pushes",
         ),
     ],
 )
@@ -208,9 +208,9 @@ pipeline = Pipeline(
 |-------|------|----------|-------------|
 | `name` | `str` | Yes | Unique name within the pipeline + branch |
 | `branch` | `str` | Yes | The git branch this webhook is indexed from and whose pipeline code runs when it fires |
-| `webhook_endpoint` | `str` | Yes | Name of the webhook endpoint configured in Console |
 | `on` | `str` | Yes | CEL expression returning `bool` — action fires only when true |
 | `transform` | `str` | Yes | CEL expression returning `map(string, map(string, dyn))` — step name to input map |
+| `webhook_endpoint` | `str` | Yes | Name of the webhook endpoint configured in Console |
 
 CEL expressions receive `payload` (the parsed JSON body) and `headers` (HTTP headers as `map(string, string)`).
 

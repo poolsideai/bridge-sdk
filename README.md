@@ -318,9 +318,9 @@ pipeline = Pipeline(
             # version of the pipeline code runs when it fires. The webhook
             # won't exist until this branch is indexed.
             branch="main",
-            webhook_endpoint="linear_issues",
             on='payload.type == "Issue" && payload.action == "create"',
             transform='{"process_issue": {"issue_id": payload.data.id, "title": payload.data.title}}',
+            webhook_endpoint="linear_issues",
         ),
     ],
 )
@@ -330,17 +330,17 @@ Each webhook action uses [CEL](https://cel.dev/) expressions that receive `paylo
 
 - **`name`** — Unique name for this webhook action within the pipeline + branch.
 - **`branch`** — The git branch this webhook is indexed from and whose pipeline code runs when it fires. The webhook only exists after that branch is indexed, and incoming events execute the pipeline version from that branch. This lets you run different versions of the same pipeline (e.g. `"main"` for development, `"production"` for stable).
-- **`webhook_endpoint`** — Name of the webhook endpoint configured in Console (e.g. `"linear_issues"`).
 - **`on`** — Returns `bool`. The action fires only when this evaluates to `true`.
 - **`transform`** — Returns `map(string, map(string, dyn))` keyed by step name. Maps webhook payload fields into step inputs.
+- **`webhook_endpoint`** — Name of the webhook endpoint configured in Console (e.g. `"linear_issues"`).
 
 ```python
 WebhookPipelineAction(
     name="custom-alerts",
     branch="staging",
-    webhook_endpoint="monitoring_alerts",
     on='payload.status == "firing" && payload.severity == "critical"',
     transform='{"handle_alert": {"alert_id": payload.alert_id, "message": payload.message}}',
+    webhook_endpoint="monitoring_alerts",
 )
 ```
 

@@ -90,8 +90,22 @@ class Pipeline:
         self.description = description
         self._eval_bindings = normalize_eval_bindings(eval_bindings)
         self.webhooks = webhooks or []
+        self._validate_webhook_uniqueness()
         # Auto-register this pipeline
         PIPELINE_REGISTRY[name] = self
+
+    def _validate_webhook_uniqueness(self) -> None:
+        """Validate that webhook actions are unique by (webhook_endpoint, pipeline, name)."""
+        seen: set[tuple[str, str]] = set()
+        for wh in self.webhooks:
+            key = (wh.webhook_endpoint, wh.name)
+            if key in seen:
+                raise ValueError(
+                    f"Duplicate webhook action: webhook_endpoint={wh.webhook_endpoint!r}, "
+                    f"name={wh.name!r} on pipeline {self.name!r}. "
+                    f"Each (webhook_endpoint, pipeline, name) combination must be unique."
+                )
+            seen.add(key)
 
     @overload
     def step(
