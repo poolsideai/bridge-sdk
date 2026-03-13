@@ -18,10 +18,8 @@ from __future__ import annotations
 
 import inspect
 import json
-import re
-from datetime import datetime
 from functools import update_wrapper
-from typing import Any, Callable, Dict, get_args, get_type_hints
+from typing import Any, Callable, Dict, TypeVar, get_args, get_type_hints
 
 from pydantic import TypeAdapter
 
@@ -29,58 +27,10 @@ from bridge_sdk.eval_data import EvalData, create_eval_data
 from bridge_sdk.eval_types import (
     EvalResult,
     PipelineEvalContext,
-    PipelineMetadata,
     StepEvalContext,
-    StepMetadata,
-    StepResult,
 )
 
 EVAL_REGISTRY: Dict[str, "EvalFunction"] = {}
-
-_RFC3339_PATTERN = re.compile(
-    r"^(?P<prefix>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})"
-    r"(?:\.(?P<fraction>\d+))?"
-    r"(?P<suffix>Z|[+-]\d{2}:\d{2})?$"
-)
-
-
-def _parse_datetime(value: Any) -> datetime:
-    """Parse a datetime from a string or return as-is if already a datetime."""
-    if isinstance(value, datetime):
-        return value
-    if isinstance(value, str):
-        match = _RFC3339_PATTERN.match(value)
-        if match:
-            prefix = match.group("prefix")
-            fraction = match.group("fraction")
-            suffix = match.group("suffix")
-            if fraction:
-                # Python datetime supports at most microsecond precision.
-                fraction = fraction[:6]
-                prefix = f"{prefix}.{fraction}"
-            if suffix == "Z":
-                suffix = "+00:00"
-            value = f"{prefix}{suffix or ''}"
-        return datetime.fromisoformat(value)
-    raise TypeError(f"Cannot parse datetime from {type(value)}: {value}")
-
-
-def _is_any(tp: Any) -> bool:
-    """Check if a type annotation is Any."""
-    return tp is Any
-
-
-def _deserialize_value(value: Any, tp: Any, field_name: str) -> Any:
-    """Deserialize a value according to the target type annotation."""
-    if _is_any(tp):
-        return value
-    try:
-        return TypeAdapter(tp).validate_python(value)
-    except Exception as e:
-        raise TypeError(
-            f"Failed to deserialize '{field_name}' as {tp!r}: {e}"
-        ) from e
-
 
 def _get_context_io_types(func: Callable[..., Any]) -> tuple[Any, Any]:
     """Extract I/O generic types from eval context annotation."""
@@ -94,8 +44,15 @@ def _get_context_io_types(func: Callable[..., Any]) -> tuple[Any, Any]:
         return Any, Any
 
     ctx_args = get_args(ctx_hint)
+    if not ctx_args:
+        meta = getattr(ctx_hint, "__pydantic_generic_metadata__", None)
+        if meta:
+            ctx_args = tuple(meta.get("args", ()))
+
     if len(ctx_args) >= 2:
-        return ctx_args[0], ctx_args[1]
+        input_type = Any if isinstance(ctx_args[0], TypeVar) else ctx_args[0]
+        output_type = Any if isinstance(ctx_args[1], TypeVar) else ctx_args[1]
+        return input_type, output_type
     return Any, Any
 
 
@@ -104,38 +61,15 @@ def _build_step_eval_context(
     input_type: Any = Any,
     output_type: Any = Any,
 ) -> StepEvalContext[Any, Any]:
-    """Build a StepEvalContext from a deserialized JSON dict."""
-    metadata_raw = data.get("metadata", {})
-    metadata = StepMetadata(
-        step_rid=metadata_raw.get("step_rid", ""),
-        step_version_id=metadata_raw.get("step_version_id", ""),
-        execution_id=metadata_raw.get("execution_id", ""),
-        repository=metadata_raw.get("repository", ""),
-        branch=metadata_raw.get("branch", ""),
-        commit_sha=metadata_raw.get("commit_sha", ""),
-        started_at=_parse_datetime(
-            metadata_raw.get("started_at") or "1970-01-01T00:00:00"
-        ),
-        completed_at=_parse_datetime(
-            metadata_raw.get("completed_at") or "1970-01-01T00:00:00"
-        ),
-        duration_ms=metadata_raw.get("duration_ms", 0),
-    )
-    return StepEvalContext(
-        step_name=data.get("step_name", ""),
-        step_input=_deserialize_value(
-            data.get("step_input"),
-            input_type,
-            "step_input",
-        ),
-        step_output=_deserialize_value(
-            data.get("step_output"),
-            output_type,
-            "step_output",
-        ),
-        trajectory=data.get("trajectory"),
-        metadata=metadata,
-    )
+    """Build a StepEvalContext from a deserialized JSON dict using pydantic validation."""
+    payload = dict(data)
+    payload.setdefault("step_input", None)
+    payload.setdefault("step_output", None)
+    model_type = StepEvalContext[input_type, output_type]
+    try:
+        return TypeAdapter(model_type).validate_python(payload)
+    except Exception as e:
+        raise TypeError(f"Failed to parse step eval context: {e}") from e
 
 
 def _build_pipeline_eval_context(
@@ -143,54 +77,15 @@ def _build_pipeline_eval_context(
     input_type: Any = Any,
     output_type: Any = Any,
 ) -> PipelineEvalContext[Any, Any]:
-    """Build a PipelineEvalContext from a deserialized JSON dict."""
-    metadata_raw = data.get("metadata")
-    metadata = None
-    if metadata_raw:
-        metadata = PipelineMetadata(
-            pipeline_rid=metadata_raw.get("pipeline_rid", ""),
-            pipeline_version_id=metadata_raw.get("pipeline_version_id", ""),
-            run_id=metadata_raw.get("run_id", ""),
-            repository=metadata_raw.get("repository", ""),
-            branch=metadata_raw.get("branch", ""),
-            commit_sha=metadata_raw.get("commit_sha", ""),
-            started_at=_parse_datetime(
-                metadata_raw.get("started_at") or "1970-01-01T00:00:00"
-            ),
-            completed_at=_parse_datetime(
-                metadata_raw.get("completed_at") or "1970-01-01T00:00:00"
-            ),
-            duration_ms=metadata_raw.get("duration_ms", 0),
-        )
-
-    steps_raw = data.get("steps", {})
-    steps = {
-        name: StepResult(
-            step_name=sr.get("step_name", name),
-            input=sr.get("input"),
-            output=sr.get("output"),
-            trajectory=sr.get("trajectory"),
-            duration_ms=sr.get("duration_ms", 0),
-            success=sr.get("success", True),
-        )
-        for name, sr in steps_raw.items()
-    }
-
-    return PipelineEvalContext(
-        pipeline_name=data.get("pipeline_name", ""),
-        pipeline_input=_deserialize_value(
-            data.get("pipeline_input"),
-            input_type,
-            "pipeline_input",
-        ),
-        pipeline_output=_deserialize_value(
-            data.get("pipeline_output"),
-            output_type,
-            "pipeline_output",
-        ),
-        steps=steps,
-        metadata=metadata,
-    )
+    """Build a PipelineEvalContext from a deserialized JSON dict using pydantic validation."""
+    payload = dict(data)
+    payload.setdefault("pipeline_input", None)
+    payload.setdefault("pipeline_output", None)
+    model_type = PipelineEvalContext[input_type, output_type]
+    try:
+        return TypeAdapter(model_type).validate_python(payload)
+    except Exception as e:
+        raise TypeError(f"Failed to parse pipeline eval context: {e}") from e
 
 
 def _encode_eval_result_value(value: Any) -> dict[str, Any]:
@@ -208,7 +103,8 @@ def _encode_eval_result_value(value: Any) -> dict[str, Any]:
 
 def _serialize_eval_result(result: EvalResult[Any]) -> str:
     """Serialize an EvalResult to a JSON string."""
-    data: dict[str, Any] = {"metrics": result.metrics}
+    result_data = result.model_dump(mode="json", exclude_none=True)
+    data: dict[str, Any] = {"metrics": result_data.get("metrics")}
     if result.result is not None:
         data["result"] = _encode_eval_result_value(result.result)
     return json.dumps(data)

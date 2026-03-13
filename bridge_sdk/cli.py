@@ -238,7 +238,7 @@ def cmd_config_get_dsl(args):
             name=p.name,
             rid=p.rid,
             description=p.description,
-            eval_bindings=getattr(p, "_eval_bindings", []),
+            eval_bindings=p._eval_bindings,
             webhooks=p.webhooks,
         ).model_dump()
         for pname, p in pipelines.items()

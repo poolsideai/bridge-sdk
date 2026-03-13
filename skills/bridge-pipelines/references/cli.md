@@ -116,12 +116,12 @@ uv run bridge run \
 
 When both `--input` and `--results` provide values for the same parameter, input takes precedence.
 
-### `bridge run-eval`
+### `bridge eval run`
 
 Execute a single eval locally for testing.
 
 ```bash
-uv run bridge run-eval \
+uv run bridge eval run \
   --eval quality_check \
   --context '{"step_name": "my_step", "step_input": {...}, "step_output": {...}, "metadata": {}}'
 ```
