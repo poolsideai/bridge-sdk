@@ -19,6 +19,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 from typing import Any
 from typing_extensions import TypedDict
 
@@ -810,8 +811,6 @@ class TestInternalHelpers:
         }
 
     def test_serialize_eval_result_invalid_result_type_raises(self):
-        from pydantic import ValidationError
-
         with pytest.raises(ValidationError):
             EvalResult(metrics={"score": 1.0}, result=["bad"])  # type: ignore[arg-type]
 

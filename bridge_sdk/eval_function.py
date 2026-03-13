@@ -63,11 +63,8 @@ def _build_step_eval_context(
 ) -> StepEvalContext[Any, Any]:
     """Build a StepEvalContext from a deserialized JSON dict using pydantic validation."""
     payload = dict(data)
-    payload.setdefault("metadata", {})
-    payload.setdefault("step_name", "")
     payload.setdefault("step_input", None)
     payload.setdefault("step_output", None)
-    payload.setdefault("trajectory", None)
     model_type = StepEvalContext[input_type, output_type]
     try:
         return TypeAdapter(model_type).validate_python(payload)
@@ -82,8 +79,6 @@ def _build_pipeline_eval_context(
 ) -> PipelineEvalContext[Any, Any]:
     """Build a PipelineEvalContext from a deserialized JSON dict using pydantic validation."""
     payload = dict(data)
-    payload.setdefault("steps", {})
-    payload.setdefault("pipeline_name", "")
     payload.setdefault("pipeline_input", None)
     payload.setdefault("pipeline_output", None)
     model_type = PipelineEvalContext[input_type, output_type]
