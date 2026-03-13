@@ -28,7 +28,10 @@ Use whichever you prefer:
 
 from typing import Annotated, Literal, Optional, Union
 
-from pydantic import BaseModel, Field, TypeAdapter
+from pydantic import BaseModel, Field, TypeAdapter, model_validator
+
+from celpy import Environment as CelEnvironment
+from celpy import celtypes
 
 from bridge_sdk.proto import bridge_sidecar_pb2
 
@@ -78,6 +81,73 @@ class SandboxDefinition(BaseModel):
 
     storage_limit: Optional[str] = None
     """Storage limit in Kubernetes format (e.g., '50Gi')."""
+
+
+class WebhookPipelineAction(BaseModel):
+    """Defines a webhook-triggered pipeline action.
+
+    Webhook endpoints are configured in Console (signature verification,
+    idempotency, secrets). The SDK only declares **actions** that reference
+    an endpoint by name and define filtering/transformation logic via CEL.
+
+    Attributes:
+        name: Unique name for this webhook action within the pipeline + branch.
+        branch: The git branch this webhook is indexed from and whose pipeline
+            code runs when it fires.
+        on: CEL expression evaluated against the payload and headers.
+            Must return bool. The action triggers only when this evaluates to true.
+        transform: CEL expression that transforms the payload into step inputs.
+            Must return ``map(string, map(string, dyn))`` keyed by step name.
+        webhook_endpoint: Name of the webhook endpoint configured in Console
+            (e.g. ``"linear_issues"``).
+
+    Example::
+
+        from bridge_sdk import Pipeline, WebhookPipelineAction
+
+        pipeline = Pipeline(
+            name="on_issue_update",
+            webhooks=[
+                WebhookPipelineAction(
+                    name="linear-issues",
+                    branch="main",
+                    on='payload.type == "Issue" && payload.action == "update"',
+                    transform='{"triage_step": {"issue": payload.data}}',
+                    webhook_endpoint="linear_issues",
+                ),
+            ],
+        )
+    """
+
+    name: str
+    """Unique name for this webhook action within the pipeline + branch."""
+
+    branch: str
+    """The git branch this webhook is indexed from and whose pipeline code runs when it fires."""
+
+    on: str
+    """CEL expression that determines whether this action should fire. Must return bool."""
+
+    transform: str
+    """CEL expression that transforms the payload into step inputs. Must return map(string, map(string, dyn))."""
+
+    webhook_endpoint: str
+    """Name of the webhook endpoint configured in Console."""
+
+    @model_validator(mode="after")
+    def _validate_cel_expressions(self) -> "WebhookPipelineAction":
+        env = CelEnvironment(annotations={
+            "payload": celtypes.Value,
+            "headers": celtypes.MapType,
+        })
+        for field_name in ("on", "transform"):
+            try:
+                env.compile(getattr(self, field_name))
+            except Exception as e:
+                raise ValueError(
+                    f"Invalid CEL expression in '{field_name}': {e}"
+                ) from e
+        return self
 
 
 class ImageURLContent(BaseModel):
