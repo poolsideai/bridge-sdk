@@ -19,9 +19,11 @@ This module shows how to:
 2. Reference webhook endpoints configured in Console by name
 3. Use CEL ``on`` expressions to filter specific webhook payloads
 4. Use CEL ``transform`` expressions to extract step inputs from payloads
+5. Route different webhook sources to different first steps that normalise
+   into a shared downstream step
 """
 
-from typing import Annotated
+from typing import Annotated, Optional
 
 from pydantic import BaseModel
 
@@ -48,7 +50,7 @@ from bridge_sdk.bridge_sidecar_client import BridgeSidecarClient
 
 pipeline = Pipeline(
     name="issue_triage",
-    description="Triage incoming issues from Linear and GitHub",
+    description="Triage incoming issues from Linear and PRs from GitHub",
     webhooks=[
         # Linear: trigger when an issue is created with the "autofix" label.
         # branch determines where this webhook is indexed from and which
@@ -62,8 +64,11 @@ pipeline = Pipeline(
                 ' && payload.action == "create"'
                 ' && payload.data.labels.exists(l, l.name == "autofix")'
             ),
+            # Both DAG root steps must receive input; fetch_pr gets an empty
+            # object so it returns None.
             transform=(
-                '{"fetch_issue": {"issue_id": payload.data.id, "title": payload.data.title}}'
+                '{"fetch_issue": {"issue_id": payload.data.id, "title": payload.data.title},'
+                ' "fetch_pr": {}}'
             ),
             webhook_endpoint="linear_issues",
         ),
@@ -79,8 +84,12 @@ pipeline = Pipeline(
                 ' && payload.action == "opened"'
                 ' && payload.pull_request.base.ref == "main"'
             ),
+            # Both DAG root steps must receive input; fetch_issue gets an
+            # empty object so it returns None.
             transform=(
-                '{"fetch_issue": {"issue_id": payload.pull_request.head.sha,'
+                '{"fetch_issue": {},'
+                ' "fetch_pr": {"pr_number": payload.pull_request.number,'
+                ' "repo": payload.repository.full_name,'
                 ' "title": payload.pull_request.title}}'
             ),
             webhook_endpoint="github_prs",
@@ -95,12 +104,18 @@ pipeline = Pipeline(
 
 
 class FetchIssueInput(BaseModel):
-    issue_id: str
-    title: str
+    issue_id: Optional[str] = None
+    title: Optional[str] = None
 
 
-class IssueDetails(BaseModel):
-    issue_id: str
+class FetchPRInput(BaseModel):
+    pr_number: Optional[int] = None
+    repo: Optional[str] = None
+    title: Optional[str] = None
+
+
+class TriageItem(BaseModel):
+    source: str
     title: str
     description: str
 
@@ -113,32 +128,55 @@ class TriageResult(BaseModel):
 # =============================================================================
 # Steps
 # =============================================================================
-# The transform expressions above map webhook payloads into step inputs.
-# For example, the Linear webhook maps payload.data.id → fetch_issue.issue_id.
+# The two webhooks target different first steps (fetch_issue vs fetch_pr),
+# each of which normalises its source into a TriageItem for the shared
+# triage_item agent step.
 
 
 @pipeline.step
-def fetch_issue(input_data: FetchIssueInput) -> IssueDetails:
-    """Fetch full issue details from the source system."""
-    return IssueDetails(
-        issue_id=input_data.issue_id,
+def fetch_issue(input_data: FetchIssueInput) -> Optional[TriageItem]:
+    """Fetch full issue details from Linear. Returns None when given empty input."""
+    if input_data.issue_id is None:
+        return None
+    return TriageItem(
+        source=f"linear:{input_data.issue_id}",
         title=input_data.title,
-        description="(fetched from API)",
+        description="(fetched from Linear API)",
+    )
+
+
+@pipeline.step
+def fetch_pr(input_data: FetchPRInput) -> Optional[TriageItem]:
+    """Fetch full PR details from GitHub. Returns None when given empty input."""
+    if input_data.pr_number is None:
+        return None
+    return TriageItem(
+        source=f"github:{input_data.repo}#{input_data.pr_number}",
+        title=input_data.title,
+        description="(fetched from GitHub API)",
     )
 
 
 @pipeline.step(metadata={"type": "agent"})
-def triage_issue(
-    issue: Annotated[IssueDetails, step_result(fetch_issue)],
+def triage_item(
+    from_issue: Annotated[Optional[TriageItem], step_result(fetch_issue)] = None,
+    from_pr: Annotated[Optional[TriageItem], step_result(fetch_pr)] = None,
 ) -> TriageResult:
-    """Use an agent to triage the issue and assign priority."""
+    """Use an agent to triage the item and assign priority.
+
+    Only one of from_issue / from_pr will be populated per run, depending
+    on which webhook fired.
+    """
+    item = from_issue or from_pr
+    assert item is not None, "Expected at least one of from_issue or from_pr"
     with BridgeSidecarClient() as client:
         _, session_id, res = client.start_agent(
             prompt=(
-                f"Triage the following issue and respond with a priority "
+                f"Triage the following item and respond with a priority "
                 f"(critical/high/medium/low).\n\n"
-                f"Title: {issue.title}\n"
-                f"Description: {issue.description}"
+                f"Source: {item.source}\n"
+                f"Title: {item.title}\n"
+                f"Description: {item.description}"
             ),
             agent_name="Malibu",
         )
