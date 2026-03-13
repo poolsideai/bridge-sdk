@@ -212,5 +212,5 @@ class PipelineData(BaseModel):
     eval_bindings: List[EvalBindingData] = Field(default_factory=list)
     """Eval bindings attached to this pipeline."""
 
-    webhooks: Optional[list[WebhookPipelineAction]] = None
+    webhooks: List[WebhookPipelineAction] = Field(default_factory=list)
     """Optional list of webhook trigger definitions."""
