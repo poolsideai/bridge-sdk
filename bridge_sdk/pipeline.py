@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 from typing_extensions import ParamSpec, TypeVar
 
 from bridge_sdk.eval_binding import EvalBindingData, EvalBindingSpec, normalize_eval_bindings
-from bridge_sdk.models import SandboxDefinition, Webhook
+from bridge_sdk.models import SandboxDefinition, WebhookPipelineAction
 from bridge_sdk.step_function import StepFunction, make_step_function
 
 P = ParamSpec("P")
@@ -69,7 +69,7 @@ class Pipeline:
         rid: str | None = None,
         description: str | None = None,
         eval_bindings: list[EvalBindingSpec] | None = None,
-        webhooks: list[Webhook] | None = None,
+        webhooks: list[WebhookPipelineAction] | None = None,
     ):
         """Initialize a Pipeline.
 
@@ -198,5 +198,5 @@ class PipelineData(BaseModel):
     eval_bindings: List[EvalBindingData] = Field(default_factory=list)
     """Eval bindings attached to this pipeline."""
 
-    webhooks: Optional[list[Webhook]] = None
+    webhooks: Optional[list[WebhookPipelineAction]] = None
     """Optional list of webhook trigger definitions."""

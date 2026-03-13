@@ -302,48 +302,44 @@ All fields are optional:
 | `storage_request` | Storage request | `"50Gi"` |
 | `storage_limit` | Storage limit | `"100Gi"` |
 
-### Webhooks
+### WebhookPipelineActions
 
-Pipelines can be triggered by external webhook events. Webhooks are declared at pipeline creation time, discovered during indexing, and start disabled until configured with a signing secret via the API or UI.
+Pipelines can be triggered by external webhook events. WebhookPipelineAction endpoints (signature verification, secrets, idempotency) are configured in Console. The SDK declares **actions** that reference an endpoint by name and define filtering/transformation logic via CEL.
 
 ```python
-from bridge_sdk import Pipeline, Webhook, WebhookProvider
+from bridge_sdk import Pipeline, WebhookPipelineAction
 
 pipeline = Pipeline(
     name="on_issue_create",
     webhooks=[
-        Webhook(
+        WebhookPipelineAction(
+            name="linear-issues",
             # branch determines where this webhook is indexed from and which
             # version of the pipeline code runs when it fires. The webhook
             # won't exist until this branch is indexed.
             branch="main",
-            filter='payload.type == "Issue" && payload.action == "create"',
-            name="linear-issues",
-            provider=WebhookProvider.LINEAR,
+            webhook_endpoint="linear_issues",
+            on='payload.type == "Issue" && payload.action == "create"',
             transform='{"process_issue": {"issue_id": payload.data.id, "title": payload.data.title}}',
         ),
     ],
 )
 ```
 
-Each webhook uses [CEL](https://cel.dev/) expressions that receive `payload` (the parsed JSON body) and `headers` (HTTP headers as `map(string, string)`):
+Each webhook action uses [CEL](https://cel.dev/) expressions that receive `payload` (the parsed JSON body) and `headers` (HTTP headers as `map(string, string)`):
 
+- **`name`** — Unique name for this webhook action within the pipeline + branch.
 - **`branch`** — The git branch this webhook is indexed from and whose pipeline code runs when it fires. The webhook only exists after that branch is indexed, and incoming events execute the pipeline version from that branch. This lets you run different versions of the same pipeline (e.g. `"main"` for development, `"production"` for stable).
-- **`filter`** — Returns `bool`. The webhook fires only when this evaluates to `true`.
-- **`transform`** — Returns `map(string, dyn)` keyed by step name. Maps webhook payload fields into step inputs.
-- **`idempotency_key`** (conditional) — Returns `string`. Required for generic providers (`generic_hmac_sha1`, `generic_hmac_sha256`), forbidden for named providers.
-
-**Available providers:** `github`, `gitlab`, `grafana`, `linear`, `slack`, `stripe`, `generic_hmac_sha1`, `generic_hmac_sha256`
-
-Generic providers work with any service that signs requests with an HMAC and require an `idempotency_key` for deduplication:
+- **`webhook_endpoint`** — Name of the webhook endpoint configured in Console (e.g. `"linear_issues"`).
+- **`on`** — Returns `bool`. The action fires only when this evaluates to `true`.
+- **`transform`** — Returns `map(string, map(string, dyn))` keyed by step name. Maps webhook payload fields into step inputs.
 
 ```python
-Webhook(
-    branch="staging",
-    filter='payload.status == "firing"',
-    idempotency_key='payload.alert_id + "/" + payload.timestamp',
+WebhookPipelineAction(
     name="custom-alerts",
-    provider=WebhookProvider.GENERIC_HMAC_SHA256,
+    branch="staging",
+    webhook_endpoint="monitoring_alerts",
+    on='payload.status == "firing" && payload.severity == "critical"',
     transform='{"handle_alert": {"alert_id": payload.alert_id, "message": payload.message}}',
 )
 ```
@@ -568,8 +564,7 @@ from bridge_sdk import (
     StepFunction,      # Type for decorated step functions
     StepData,          # Pydantic model for step metadata
     SandboxDefinition, # Optional compute resources for a step's sandbox
-    Webhook,           # Webhook trigger definition
-    WebhookProvider,   # Provider constants (GITHUB, LINEAR, etc.)
+    WebhookPipelineAction,           # WebhookPipelineAction action definition
     STEP_REGISTRY,     # Global registry of discovered steps
     get_dsl_output,    # Generate DSL from registry
 

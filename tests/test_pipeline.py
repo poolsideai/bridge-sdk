@@ -28,8 +28,7 @@ from bridge_sdk import (
     step_result,
     STEP_REGISTRY,
     SandboxDefinition,
-    Webhook,
-    WebhookProvider,
+    WebhookPipelineAction,
 )
 from bridge_sdk.cli import (
     discover_steps_and_pipelines,
@@ -662,104 +661,61 @@ class TestPipelineStepSandboxDefinition:
 
 
 # =============================================================================
-# Webhook Tests
+# WebhookPipelineAction Tests
 # =============================================================================
 
 
-class TestWebhookModel:
-    """Tests for the Webhook Pydantic model."""
+class TestWebhookPipelineActionModel:
+    """Tests for the WebhookPipelineAction Pydantic model."""
 
     def test_webhook_minimal(self):
-        """Test Webhook with required fields only."""
-        wh = Webhook(
-            branch="main",
-            filter="true",
+        """Test WebhookPipelineAction with all required fields."""
+        wh = WebhookPipelineAction(
             name="my-hook",
-            provider=WebhookProvider.LINEAR,
+            branch="main",
+            webhook_endpoint="linear_issues",
+            on="true",
             transform='{"triage_step": {"issue_url": payload.data.url}}',
         )
-        assert wh.branch == "main"
         assert wh.name == "my-hook"
-        assert wh.provider == "linear"
-        assert wh.filter == "true"
+        assert wh.branch == "main"
+        assert wh.webhook_endpoint == "linear_issues"
+        assert wh.on == "true"
         assert wh.transform == '{"triage_step": {"issue_url": payload.data.url}}'
-        assert wh.idempotency_key is None
-
-    def test_webhook_with_idempotency_key(self):
-        """Test Webhook with optional idempotency_key."""
-        wh = Webhook(
-            branch="main",
-            filter='payload.action == "opened"',
-            idempotency_key="payload.delivery_id",
-            name="dedup-hook",
-            provider=WebhookProvider.GENERIC_HMAC_SHA256,
-            transform='{"ingest_step": {"event_type": payload.action, "data": payload.body}}',
-        )
-        assert wh.idempotency_key == "payload.delivery_id"
-
-    def test_webhook_idempotency_key_rejected_for_named_provider(self):
-        """Test that idempotency_key is rejected for non-generic providers."""
-        with pytest.raises(ValueError, match="idempotency_key is only valid"):
-            Webhook(
-                branch="main",
-                filter='payload.action == "opened"',
-                idempotency_key="payload.delivery_id",
-                name="bad-hook",
-                provider=WebhookProvider.GITHUB,
-                transform='{"review_step": {"pr_number": payload.pull_request.number}}',
-            )
-
-    def test_webhook_idempotency_key_required_for_generic_provider(self):
-        """Test that idempotency_key is required for generic providers."""
-        with pytest.raises(ValueError, match="idempotency_key is required"):
-            Webhook(
-                branch="main",
-                filter="true",
-                name="missing-key-hook",
-                provider=WebhookProvider.GENERIC_HMAC_SHA256,
-                transform='{"ingest_step": {"data": payload.body}}',
-            )
 
     def test_webhook_serialization(self):
-        """Test Webhook model serialization round-trip."""
-        wh = Webhook(
-            branch="main",
-            filter='payload.type == "invoice.paid"',
+        """Test WebhookPipelineAction model serialization round-trip."""
+        wh = WebhookPipelineAction(
             name="serial-hook",
-            provider=WebhookProvider.STRIPE,
+            branch="main",
+            webhook_endpoint="stripe_invoices",
+            on='payload.type == "invoice.paid"',
             transform='{"billing_step": {"invoice_id": payload.data.object.id, "amount": payload.data.object.amount_paid}}',
         )
         dumped = wh.model_dump()
         assert dumped["name"] == "serial-hook"
-        assert dumped["provider"] == "stripe"
-        assert dumped["idempotency_key"] is None
+        assert dumped["webhook_endpoint"] == "stripe_invoices"
+        assert dumped["on"] == 'payload.type == "invoice.paid"'
+        assert "provider" not in dumped
+        assert "idempotency_key" not in dumped
+        assert "filter" not in dumped
 
         parsed = json.loads(json.dumps(dumped))
         assert parsed["name"] == "serial-hook"
-
-    def test_webhook_provider_values(self):
-        """Test all WebhookProvider constants."""
-        assert WebhookProvider.GITHUB == "github"
-        assert WebhookProvider.GITLAB == "gitlab"
-        assert WebhookProvider.GRAFANA == "grafana"
-        assert WebhookProvider.LINEAR == "linear"
-        assert WebhookProvider.SLACK == "slack"
-        assert WebhookProvider.STRIPE == "stripe"
-        assert WebhookProvider.GENERIC_HMAC_SHA1 == "generic_hmac_sha1"
-        assert WebhookProvider.GENERIC_HMAC_SHA256 == "generic_hmac_sha256"
+        assert parsed["webhook_endpoint"] == "stripe_invoices"
 
 
-class TestPipelineWebhooks:
+class TestPipelineWebhookPipelineActions:
     """Tests for webhooks on Pipeline and PipelineData."""
 
     def test_pipeline_with_webhooks(self):
         """Test Pipeline instantiation with webhooks."""
         webhooks = [
-            Webhook(
-                branch="main",
-                filter='payload.ref == "refs/heads/main"',
+            WebhookPipelineAction(
                 name="on-push",
-                provider=WebhookProvider.GITHUB,
+                branch="main",
+                webhook_endpoint="github_pushes",
+                on='payload.ref == "refs/heads/main"',
                 transform='{"index_step": {"repo": payload.repository.full_name, "commit_sha": payload.head_commit.id}}',
             ),
         ]
@@ -776,11 +732,11 @@ class TestPipelineWebhooks:
     def test_pipeline_webhooks_in_registry(self):
         """Test that webhooks are preserved in the registry."""
         webhooks = [
-            Webhook(
-                branch="main",
-                filter="true",
+            WebhookPipelineAction(
                 name="hook-a",
-                provider=WebhookProvider.LINEAR,
+                branch="main",
+                webhook_endpoint="linear_issues",
+                on="true",
                 transform='{"triage_step": {"issue_id": payload.data.id}}',
             ),
         ]
@@ -793,18 +749,18 @@ class TestPipelineWebhooks:
     def test_pipeline_multiple_webhooks(self):
         """Test Pipeline with multiple webhooks."""
         webhooks = [
-            Webhook(
-                branch="main",
-                filter='payload.type == "Issue"',
+            WebhookPipelineAction(
                 name="linear-hook",
-                provider=WebhookProvider.LINEAR,
+                branch="main",
+                webhook_endpoint="linear_issues",
+                on='payload.type == "Issue"',
                 transform='{"triage_step": {"issue_id": payload.data.id, "title": payload.data.title}}',
             ),
-            Webhook(
-                branch="main",
-                filter='payload.action == "opened"',
+            WebhookPipelineAction(
                 name="github-hook",
-                provider=WebhookProvider.GITHUB,
+                branch="main",
+                webhook_endpoint="github_prs",
+                on='payload.action == "opened"',
                 transform='{"review_step": {"pr_number": payload.pull_request.number, "head_sha": payload.pull_request.head.sha}}',
             ),
         ]
@@ -814,12 +770,11 @@ class TestPipelineWebhooks:
     def test_pipeline_data_with_webhooks(self):
         """Test PipelineData serialization with webhooks."""
         webhooks = [
-            Webhook(
-                branch="main",
-                filter='payload.type == "message"',
-                idempotency_key="payload.event_id",
+            WebhookPipelineAction(
                 name="data-hook",
-                provider=WebhookProvider.GENERIC_HMAC_SHA256,
+                branch="main",
+                webhook_endpoint="slack_events",
+                on='payload.type == "message"',
                 transform='{"chat_step": {"channel": payload.channel, "text": payload.text}}',
             ),
         ]
@@ -832,8 +787,7 @@ class TestPipelineWebhooks:
         assert "webhooks" in dumped
         assert len(dumped["webhooks"]) == 1
         assert dumped["webhooks"][0]["name"] == "data-hook"
-        assert dumped["webhooks"][0]["provider"] == "generic_hmac_sha256"
-        assert dumped["webhooks"][0]["idempotency_key"] == "payload.event_id"
+        assert dumped["webhooks"][0]["webhook_endpoint"] == "slack_events"
 
     def test_pipeline_data_without_webhooks(self):
         """Test PipelineData with no webhooks omits the field when exclude_none."""
@@ -846,11 +800,11 @@ class TestPipelineWebhooks:
     def test_pipeline_webhooks_in_dsl_output(self):
         """Test that webhooks appear in the full DSL output structure."""
         webhooks = [
-            Webhook(
-                branch="main",
-                filter='payload.state == "alerting"',
+            WebhookPipelineAction(
                 name="dsl-hook",
-                provider=WebhookProvider.GRAFANA,
+                branch="main",
+                webhook_endpoint="grafana_alerts",
+                on='payload.state == "alerting"',
                 transform='{"alert_step": {"alertname": payload.alerts[0].labels.alertname, "severity": payload.alerts[0].labels.severity}}',
             ),
         ]
@@ -879,7 +833,7 @@ class TestPipelineWebhooks:
         assert "webhooks" in p_out
         assert len(p_out["webhooks"]) == 1
         assert p_out["webhooks"][0]["name"] == "dsl-hook"
-        assert p_out["webhooks"][0]["provider"] == "grafana"
+        assert p_out["webhooks"][0]["webhook_endpoint"] == "grafana_alerts"
 
         # Verify JSON round-trip
         parsed = json.loads(json.dumps(dsl_output))
@@ -888,11 +842,11 @@ class TestPipelineWebhooks:
     def test_pipeline_webhooks_in_repr(self):
         """Test that Pipeline repr includes webhooks."""
         webhooks = [
-            Webhook(
-                branch="main",
-                filter="true",
+            WebhookPipelineAction(
                 name="repr-hook",
-                provider=WebhookProvider.LINEAR,
+                branch="main",
+                webhook_endpoint="linear_issues",
+                on="true",
                 transform='{"process_step": {"issue_url": payload.data.url}}',
             ),
         ]

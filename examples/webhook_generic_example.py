@@ -12,17 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Example pipeline using a generic HMAC webhook provider.
+"""Example pipeline using a webhook endpoint for a custom monitoring service.
 
-Generic providers (generic_hmac_sha1, generic_hmac_sha256) work with any
-service that signs requests with an HMAC. Unlike named providers (github,
-linear, etc.), generic providers require an idempotency_key expression so
-Bridge can deduplicate deliveries.
+WebhookPipelineAction endpoints (signature verification, idempotency, secrets) are
+configured in Console. The SDK declares actions that reference an endpoint
+by name and define filtering/transformation logic via CEL.
 """
 
 from pydantic import BaseModel
 
-from bridge_sdk import Pipeline, Webhook, WebhookProvider
+from bridge_sdk import Pipeline, WebhookPipelineAction
 
 
 pipeline = Pipeline(
@@ -33,12 +32,11 @@ pipeline = Pipeline(
         # version of the pipeline code runs — "staging" here means the
         # webhook is discovered when staging is indexed and events run
         # the staging version of handle_alert.
-        Webhook(
-            branch="staging",
-            filter='payload.status == "firing" && payload.severity == "critical"',
-            idempotency_key='payload.alert_id + "/" + payload.timestamp',
+        WebhookPipelineAction(
             name="custom-alerts",
-            provider=WebhookProvider.GENERIC_HMAC_SHA256,
+            branch="staging",
+            webhook_endpoint="monitoring_alerts",
+            on='payload.status == "firing" && payload.severity == "critical"',
             transform=(
                 '{"handle_alert": {"alert_id": payload.alert_id,'
                 ' "service": payload.service,'

@@ -41,8 +41,7 @@ from .models import (
     ImageURLContentPart,
     SandboxDefinition,
     TextContentPart,
-    Webhook,
-    WebhookProvider,
+    WebhookPipelineAction,
     to_proto_content_part,
 )
 
@@ -90,8 +89,7 @@ __all__ = [
     "ImageURLContentPart",
     "SandboxDefinition",
     "TextContentPart",
-    "Webhook",
-    "WebhookProvider",
+    "WebhookPipelineAction",
     "to_proto_content_part",
     "bridge_eval",
     "EvalFunction",

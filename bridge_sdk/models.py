@@ -28,7 +28,7 @@ Use whichever you prefer:
 
 from typing import Annotated, Literal, Optional, Union
 
-from pydantic import BaseModel, Field, TypeAdapter, model_validator
+from pydantic import BaseModel, Field, TypeAdapter
 
 from bridge_sdk.proto import bridge_sidecar_pb2
 
@@ -80,97 +80,56 @@ class SandboxDefinition(BaseModel):
     """Storage limit in Kubernetes format (e.g., '50Gi')."""
 
 
-class WebhookProvider(str):
-    """Supported webhook provider identifiers.
+class WebhookPipelineAction(BaseModel):
+    """Defines a webhook-triggered pipeline action.
 
-    Each provider has its own signature verification scheme and header conventions.
-
-    Generic providers (``generic_*``) require an ``idempotency_key`` CEL
-    expression that can reference ``headers`` and ``payload`` from the
-    incoming webhook request.
-    """
-
-    GITHUB = "github"
-    GITLAB = "gitlab"
-    GRAFANA = "grafana"
-    LINEAR = "linear"
-    SLACK = "slack"
-    STRIPE = "stripe"
-    GENERIC_HMAC_SHA1 = "generic_hmac_sha1"
-    GENERIC_HMAC_SHA256 = "generic_hmac_sha256"
-
-
-class Webhook(BaseModel):
-    """Defines a webhook trigger for a pipeline.
-
-    Webhooks are declared in pipeline code and discovered during indexing.
-    They start disabled — the user configures a signing secret and enables
-    the webhook via the API or UI.
+    Webhook endpoints are configured in Console (signature verification,
+    idempotency, secrets). The SDK only declares **actions** that reference
+    an endpoint by name and define filtering/transformation logic via CEL.
 
     Attributes:
+        name: Unique name for this webhook action within the pipeline + branch.
         branch: The git branch this webhook is indexed from and whose pipeline
             code runs when it fires.
-        filter: CEL expression evaluated against the payload and headers.
-            Must return bool. The webhook triggers only when this evaluates to true.
-        idempotency_key: CEL expression that extracts a deduplication key from the
-            payload. Must return string. Required for generic providers, forbidden
-            for named providers.
-        name: Unique name for this webhook within the pipeline + branch.
-        provider: The webhook provider (determines signature verification).
+        webhook_endpoint: Name of the webhook endpoint configured in Console
+            (e.g. ``"linear_issues"``).
+        on: CEL expression evaluated against the payload and headers.
+            Must return bool. The action triggers only when this evaluates to true.
         transform: CEL expression that transforms the payload into step inputs.
-            Must return map(string, dyn) keyed by step name.
+            Must return ``map(string, map(string, dyn))`` keyed by step name.
 
     Example::
 
-        from bridge_sdk import Pipeline, Webhook, WebhookProvider
+        from bridge_sdk import Pipeline, Webhook
 
         pipeline = Pipeline(
             name="on_issue_update",
             webhooks=[
                 Webhook(
-                    branch="main",
-                    filter='payload.type == "Issue" && payload.action == "update"',
                     name="linear-issues",
-                    provider=WebhookProvider.LINEAR,
+                    branch="main",
+                    webhook_endpoint="linear_issues",
+                    on='payload.type == "Issue" && payload.action == "update"',
                     transform='{"triage_step": {"issue": payload.data}}',
                 ),
             ],
         )
     """
 
+    name: str
+    """Unique name for this webhook action within the pipeline + branch."""
+
     branch: str
     """The git branch this webhook is indexed from and whose pipeline code runs when it fires."""
 
-    filter: str
-    """CEL expression that determines whether this webhook should fire. Must return bool."""
+    webhook_endpoint: str
+    """Name of the webhook endpoint configured in Console."""
 
-    idempotency_key: Optional[str] = None
-    """CEL expression to extract a deduplication key. Must return string.
-    Required for generic providers, forbidden for named providers."""
-
-    name: str
-    """Unique name for this webhook within the pipeline + branch."""
-
-    provider: str
-    """The webhook provider identifier (e.g. 'github', 'linear')."""
+    on: str
+    """CEL expression that determines whether this action should fire. Must return bool."""
 
     transform: str
-    """CEL expression that transforms the payload into step inputs. Must return map(string, dyn)."""
-
-    @model_validator(mode="after")
-    def _validate_idempotency_key(self) -> "Webhook":
-        is_generic = self.provider.startswith("generic_")
-        if self.idempotency_key is not None and not is_generic:
-            raise ValueError(
-                f"idempotency_key is only valid for generic providers, "
-                f"got '{self.provider}'"
-            )
-        if self.idempotency_key is None and is_generic:
-            raise ValueError(
-                f"idempotency_key is required for generic provider "
-                f"'{self.provider}'"
-            )
-        return self
+    """CEL expression that transforms the payload into step inputs. Must return map(string, map(string, dyn))."""
 
 
 class ImageURLContent(BaseModel):

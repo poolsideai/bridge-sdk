@@ -171,12 +171,12 @@ def secure_step() -> str:
 
 Keys are credential UUIDs registered in the Bridge UI. Values are the env var names to inject.
 
-### Webhooks
+### WebhookPipelineActions
 
-Pipelines can be triggered by external webhook events. Define webhooks in the pipeline code — they are discovered during indexing and start disabled until configured via the UI.
+Pipelines can be triggered by external webhook events. WebhookPipelineAction endpoints (signature verification, secrets, idempotency) are configured in Console. The SDK declares **actions** that reference an endpoint by name and define filtering/transformation logic via CEL.
 
 ```python
-from bridge_sdk import Pipeline, Webhook, WebhookProvider
+from bridge_sdk import Pipeline, WebhookPipelineAction
 
 pipeline = Pipeline(
     name="on_issue_update",
@@ -184,40 +184,37 @@ pipeline = Pipeline(
         # branch determines where this webhook is indexed from and which
         # version of the pipeline code runs when it fires. The webhook won't
         # exist until this branch is indexed.
-        Webhook(
-            branch="main",
-            filter='payload.type == "Issue" && payload.action == "update"',
+        WebhookPipelineAction(
             name="linear-issues",
-            provider=WebhookProvider.LINEAR,
+            branch="main",
+            webhook_endpoint="linear_issues",
+            on='payload.type == "Issue" && payload.action == "update"',
             transform='{"triage_step": {"issue_id": payload.data.id, "title": payload.data.title}}',
         ),
-        Webhook(
-            branch="production",
-            filter='payload.ref == "refs/heads/main"',
+        WebhookPipelineAction(
             name="github-push",
-            provider=WebhookProvider.GITHUB,
+            branch="production",
+            webhook_endpoint="github_pushes",
+            on='payload.ref == "refs/heads/main"',
             transform='{"index_step": {"repo": payload.repository.full_name, "commit_sha": payload.head_commit.id}}',
         ),
     ],
 )
 ```
 
-**Webhook fields:**
+**WebhookPipelineAction fields:**
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `branch` | `str` | Yes | The git branch this webhook is indexed from and whose pipeline code runs when it fires |
-| `filter` | `str` | Yes | CEL expression returning `bool` — webhook fires only when true |
-| `idempotency_key` | `str` | Conditional | CEL expression returning `string` for deduplication. Required for generic providers, forbidden for named providers. |
 | `name` | `str` | Yes | Unique name within the pipeline + branch |
-| `provider` | `str` | Yes | Provider identifier (use `WebhookProvider` constants) |
-| `transform` | `str` | Yes | CEL expression returning `map(string, dyn)` — step name to input map |
-
-**Available providers:** `github`, `gitlab`, `grafana`, `linear`, `slack`, `stripe`, `generic_hmac_sha1`, `generic_hmac_sha256`
+| `branch` | `str` | Yes | The git branch this webhook is indexed from and whose pipeline code runs when it fires |
+| `webhook_endpoint` | `str` | Yes | Name of the webhook endpoint configured in Console |
+| `on` | `str` | Yes | CEL expression returning `bool` — action fires only when true |
+| `transform` | `str` | Yes | CEL expression returning `map(string, map(string, dyn))` — step name to input map |
 
 CEL expressions receive `payload` (the parsed JSON body) and `headers` (HTTP headers as `map(string, string)`).
 
-Example files: `examples/webhook_example.py` (named providers), `examples/webhook_generic_example.py` (generic HMAC provider with idempotency key).
+Example files: `examples/webhook_example.py`, `examples/webhook_generic_example.py`.
 
 ## Agent Integration
 

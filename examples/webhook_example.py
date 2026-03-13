@@ -15,31 +15,32 @@
 """Example pipeline triggered by webhooks.
 
 This module shows how to:
-1. Define webhooks on a Pipeline to trigger it from external events
-2. Use CEL filter expressions to match specific webhook payloads
-3. Use CEL transform expressions to extract step inputs from payloads
-4. Handle multiple webhook providers on the same pipeline
+1. Define webhook actions on a Pipeline to trigger it from external events
+2. Reference webhook endpoints configured in Console by name
+3. Use CEL ``on`` expressions to filter specific webhook payloads
+4. Use CEL ``transform`` expressions to extract step inputs from payloads
 """
 
 from typing import Annotated
 
 from pydantic import BaseModel
 
-from bridge_sdk import Pipeline, Webhook, WebhookProvider, step_result
+from bridge_sdk import Pipeline, WebhookPipelineAction, step_result
 from bridge_sdk.bridge_sidecar_client import BridgeSidecarClient
 
 
 # =============================================================================
-# Pipeline Definition with Webhooks
+# Pipeline Definition with WebhookPipelineActions
 # =============================================================================
-# Webhooks are declared at pipeline creation time. They are discovered during
-# indexing and start disabled — the user configures a signing secret and
-# enables the webhook via the API or UI.
+# WebhookPipelineAction endpoints (signature verification, secrets, idempotency) are
+# configured in Console. The SDK declares **actions** that reference an
+# endpoint by name and define filtering/transformation logic via CEL.
 #
-# Each webhook has:
-#   - filter:    CEL expression returning bool (should this event trigger?)
-#   - transform: CEL expression returning map(string, dyn) keyed by step name
-#                (what inputs should each step receive?)
+# Each webhook action has:
+#   - webhook_endpoint: name of the endpoint configured in Console
+#   - on:        CEL expression returning bool (should this event trigger?)
+#   - transform: CEL expression returning map(string, map(string, dyn))
+#                keyed by step name (what inputs should each step receive?)
 #
 # CEL expressions can reference:
 #   - payload: the parsed JSON body of the webhook request
@@ -53,15 +54,15 @@ pipeline = Pipeline(
         # branch determines where this webhook is indexed from and which
         # version of the pipeline code runs — "main" here means the webhook
         # is discovered when main is indexed and events run mainline code.
-        Webhook(
+        WebhookPipelineAction(
+            name="linear-autofix",
             branch="main",
-            filter=(
+            webhook_endpoint="linear_issues",
+            on=(
                 'payload.type == "Issue"'
                 ' && payload.action == "create"'
                 ' && payload.data.labels.exists(l, l.name == "autofix")'
             ),
-            name="linear-autofix",
-            provider=WebhookProvider.LINEAR,
             transform=(
                 '{"fetch_issue": {"issue_id": payload.data.id, "title": payload.data.title}}'
             ),
@@ -70,15 +71,15 @@ pipeline = Pipeline(
         # Using "production" means this webhook is only indexed from the
         # production branch and events run that branch's pipeline code —
         # useful for pinning to a stable version of your steps.
-        Webhook(
+        WebhookPipelineAction(
+            name="github-pr-opened",
             branch="production",
-            filter=(
+            webhook_endpoint="github_prs",
+            on=(
                 'headers["x-github-event"] == "pull_request"'
                 ' && payload.action == "opened"'
                 ' && payload.pull_request.base.ref == "main"'
             ),
-            name="github-pr-opened",
-            provider=WebhookProvider.GITHUB,
             transform=(
                 '{"fetch_issue": {"issue_id": payload.pull_request.head.sha,'
                 ' "title": payload.pull_request.title}}'
