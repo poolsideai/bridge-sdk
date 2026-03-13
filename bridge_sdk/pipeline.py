@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 from typing_extensions import ParamSpec, TypeVar
 
 from bridge_sdk.eval_binding import EvalBindingData, EvalBindingSpec, normalize_eval_bindings
-from bridge_sdk.models import SandboxDefinition
+from bridge_sdk.models import SandboxDefinition, WebhookPipelineAction
 from bridge_sdk.step_function import StepFunction, make_step_function
 
 P = ParamSpec("P")
@@ -60,6 +60,7 @@ class Pipeline:
         name: The unique name of the pipeline.
         rid: Optional stable resource identifier (UUID).
         description: Optional human-readable description.
+        webhooks: Optional list of webhook triggers for this pipeline.
     """
 
     def __init__(
@@ -68,6 +69,7 @@ class Pipeline:
         rid: str | None = None,
         description: str | None = None,
         eval_bindings: list[EvalBindingSpec] | None = None,
+        webhooks: list[WebhookPipelineAction] | None = None,
     ):
         """Initialize a Pipeline.
 
@@ -81,15 +83,29 @@ class Pipeline:
                 may be:
                 - EvalFunction | str (condition defaults to true)
                 - (EvalFunction | str, Condition | str)
+            webhooks: Optional list of webhook triggers for this pipeline.
         """
         self.name = name
         self.rid = rid
         self.description = description
-
         self._eval_bindings = normalize_eval_bindings(eval_bindings)
-
+        self.webhooks = webhooks or []
+        self._validate_webhook_uniqueness()
         # Auto-register this pipeline
         PIPELINE_REGISTRY[name] = self
+
+    def _validate_webhook_uniqueness(self) -> None:
+        """Validate that webhook actions are unique by (webhook_endpoint, pipeline, name)."""
+        seen: set[tuple[str, str]] = set()
+        for wh in self.webhooks:
+            key = (wh.webhook_endpoint, wh.name)
+            if key in seen:
+                raise ValueError(
+                    f"Duplicate webhook action: webhook_endpoint={wh.webhook_endpoint!r}, "
+                    f"name={wh.name!r} on pipeline {self.name!r}. "
+                    f"Each (webhook_endpoint, pipeline, name) combination must be unique."
+                )
+            seen.add(key)
 
     @overload
     def step(
@@ -166,7 +182,7 @@ class Pipeline:
         return _create
 
     def __repr__(self) -> str:
-        return f"Pipeline(name={self.name!r}, rid={self.rid!r}, description={self.description!r})"
+        return f"Pipeline(name={self.name!r}, rid={self.rid!r}, description={self.description!r}, webhooks={self.webhooks!r})"
 
 
 class PipelineData(BaseModel):
@@ -180,6 +196,7 @@ class PipelineData(BaseModel):
         name: The unique name of the pipeline.
         rid: Optional stable resource identifier (UUID).
         description: Optional human-readable description.
+        webhooks: Optional list of webhook definitions.
     """
 
     name: str
@@ -194,3 +211,6 @@ class PipelineData(BaseModel):
 
     eval_bindings: List[EvalBindingData] = Field(default_factory=list)
     """Eval bindings attached to this pipeline."""
+
+    webhooks: List[WebhookPipelineAction] = Field(default_factory=list)
+    """Optional list of webhook trigger definitions."""

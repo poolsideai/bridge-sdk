@@ -5,6 +5,7 @@ description = "Python SDK for defining workflow steps"
 license = "Apache-2.0"
 requires-python = ">=3.10"
 dependencies = [
+    "cel-python>=0.5.0",
     "pydantic>=2.0.0",
     "grpcio>=1.60.0",
     "grpcio-tools>=1.60.0",

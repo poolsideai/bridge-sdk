@@ -171,6 +171,51 @@ def secure_step() -> str:
 
 Keys are credential UUIDs registered in the Bridge UI. Values are the env var names to inject.
 
+### WebhookPipelineActions
+
+Pipelines can be triggered by external webhook events. WebhookPipelineAction endpoints (signature verification, secrets, idempotency) are configured in Console. The SDK declares **actions** that reference an endpoint by name and define filtering/transformation logic via CEL.
+
+```python
+from bridge_sdk import Pipeline, WebhookPipelineAction
+
+pipeline = Pipeline(
+    name="on_issue_update",
+    webhooks=[
+        # branch determines where this webhook is indexed from and which
+        # version of the pipeline code runs when it fires. The webhook won't
+        # exist until this branch is indexed.
+        WebhookPipelineAction(
+            name="linear-issues",
+            branch="main",
+            on='payload.type == "Issue" && payload.action == "update"',
+            transform='{"triage_step": {"issue_id": payload.data.id, "title": payload.data.title}}',
+            webhook_endpoint="linear_issues",
+        ),
+        WebhookPipelineAction(
+            name="github-push",
+            branch="production",
+            on='payload.ref == "refs/heads/main"',
+            transform='{"index_step": {"repo": payload.repository.full_name, "commit_sha": payload.head_commit.id}}',
+            webhook_endpoint="github_pushes",
+        ),
+    ],
+)
+```
+
+**WebhookPipelineAction fields:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | `str` | Yes | Unique name within the pipeline + branch |
+| `branch` | `str` | Yes | The git branch this webhook is indexed from and whose pipeline code runs when it fires |
+| `on` | `str` | Yes | CEL expression returning `bool` — action fires only when true |
+| `transform` | `str` | Yes | CEL expression returning `map(string, map(string, dyn))` — step name to input map |
+| `webhook_endpoint` | `str` | Yes | Name of the webhook endpoint configured in Console |
+
+CEL expressions receive `payload` (the parsed JSON body) and `headers` (HTTP headers as `map(string, string)`).
+
+Example files: `examples/webhook_example.py`, `examples/webhook_generic_example.py`.
+
 ## Agent Integration
 
 Steps can launch AI agents via the Bridge sidecar gRPC service. See [references/agents.md](references/agents.md) for the full agent integration guide.

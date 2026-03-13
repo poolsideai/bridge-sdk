@@ -27,7 +27,8 @@ from bridge_sdk import (
     step,
     step_result,
     STEP_REGISTRY,
-    SandboxDefinition
+    SandboxDefinition,
+    WebhookPipelineAction,
 )
 from bridge_sdk.cli import (
     discover_steps_and_pipelines,
@@ -657,6 +658,282 @@ class TestPipelineStepSandboxDefinition:
         assert step_data.sandbox_definition is not None
         assert step_data.sandbox_definition.image == "gpu-image:cuda11"
         assert step_data.sandbox_definition.cpu_request == "4"
+
+
+# =============================================================================
+# WebhookPipelineAction Tests
+# =============================================================================
+
+
+class TestPipelineWebhookPipelineActions:
+    """Tests for WebhookPipelineAction model, Pipeline integration, and CEL validation."""
+
+    def test_webhook_minimal(self):
+        """Test WebhookPipelineAction with all required fields."""
+        wh = WebhookPipelineAction(
+            name="my-hook",
+            branch="main",
+            on="true",
+            transform='{"triage_step": {"issue_url": payload.data.url}}',
+            webhook_endpoint="linear_issues",
+        )
+        assert wh.name == "my-hook"
+        assert wh.branch == "main"
+        assert wh.webhook_endpoint == "linear_issues"
+        assert wh.on == "true"
+        assert wh.transform == '{"triage_step": {"issue_url": payload.data.url}}'
+
+    def test_webhook_serialization(self):
+        """Test WebhookPipelineAction model serialization round-trip."""
+        wh = WebhookPipelineAction(
+            name="serial-hook",
+            branch="main",
+            on='payload.type == "invoice.paid"',
+            transform='{"billing_step": {"invoice_id": payload.data.object.id, "amount": payload.data.object.amount_paid}}',
+            webhook_endpoint="stripe_invoices",
+        )
+        dumped = wh.model_dump()
+        assert dumped["name"] == "serial-hook"
+        assert dumped["webhook_endpoint"] == "stripe_invoices"
+        assert dumped["on"] == 'payload.type == "invoice.paid"'
+        assert "provider" not in dumped
+        assert "idempotency_key" not in dumped
+        assert "filter" not in dumped
+
+        parsed = json.loads(json.dumps(dumped))
+        assert parsed["name"] == "serial-hook"
+        assert parsed["webhook_endpoint"] == "stripe_invoices"
+
+    def test_pipeline_with_webhooks(self):
+        """Test Pipeline instantiation with webhooks."""
+        webhooks = [
+            WebhookPipelineAction(
+                name="on-push",
+                branch="main",
+                on='payload.ref == "refs/heads/main"',
+                transform='{"index_step": {"repo": payload.repository.full_name, "commit_sha": payload.head_commit.id}}',
+                webhook_endpoint="github_pushes",
+            ),
+        ]
+        pipeline = Pipeline(name="webhook_pipeline", webhooks=webhooks)
+
+        assert len(pipeline.webhooks) == 1
+        assert pipeline.webhooks[0].name == "on-push"
+
+    def test_pipeline_without_webhooks(self):
+        """Test Pipeline defaults to empty webhooks list."""
+        pipeline = Pipeline(name="no_hooks_pipeline")
+        assert pipeline.webhooks == []
+
+    def test_pipeline_webhooks_in_registry(self):
+        """Test that webhooks are preserved in the registry."""
+        webhooks = [
+            WebhookPipelineAction(
+                name="hook-a",
+                branch="main",
+                on="true",
+                transform='{"triage_step": {"issue_id": payload.data.id}}',
+                webhook_endpoint="linear_issues",
+            ),
+        ]
+        Pipeline(name="reg_webhook_pipeline", webhooks=webhooks)
+
+        p = PIPELINE_REGISTRY["reg_webhook_pipeline"]
+        assert len(p.webhooks) == 1
+        assert p.webhooks[0].name == "hook-a"
+
+    def test_pipeline_multiple_webhooks(self):
+        """Test Pipeline with multiple webhooks."""
+        webhooks = [
+            WebhookPipelineAction(
+                name="linear-hook",
+                branch="main",
+                on='payload.type == "Issue"',
+                transform='{"triage_step": {"issue_id": payload.data.id, "title": payload.data.title}}',
+                webhook_endpoint="linear_issues",
+            ),
+            WebhookPipelineAction(
+                name="github-hook",
+                branch="main",
+                on='payload.action == "opened"',
+                transform='{"review_step": {"pr_number": payload.pull_request.number, "head_sha": payload.pull_request.head.sha}}',
+                webhook_endpoint="github_prs",
+            ),
+        ]
+        pipeline = Pipeline(name="multi_hook_pipeline", webhooks=webhooks)
+        assert len(pipeline.webhooks) == 2
+
+    def test_pipeline_duplicate_webhook_rejected(self):
+        """Test that duplicate (webhook_endpoint, name) raises ValueError."""
+        webhooks = [
+            WebhookPipelineAction(
+                name="hook-a",
+                branch="main",
+                on="true",
+                transform='{"step": {"k": "v"}}',
+                webhook_endpoint="linear_issues",
+            ),
+            WebhookPipelineAction(
+                name="hook-a",
+                branch="main",
+                on="true",
+                transform='{"step": {"k": "v"}}',
+                webhook_endpoint="linear_issues",
+            ),
+        ]
+        with pytest.raises(ValueError, match="Duplicate webhook action"):
+            Pipeline(name="dup_pipeline", webhooks=webhooks)
+
+    def test_pipeline_same_name_different_endpoint_allowed(self):
+        """Test that same name on different endpoints is allowed."""
+        webhooks = [
+            WebhookPipelineAction(
+                name="hook-a",
+                branch="main",
+                on="true",
+                transform='{"step": {"k": "v"}}',
+                webhook_endpoint="linear_issues",
+            ),
+            WebhookPipelineAction(
+                name="hook-a",
+                branch="main",
+                on="true",
+                transform='{"step": {"k": "v"}}',
+                webhook_endpoint="github_prs",
+            ),
+        ]
+        pipeline = Pipeline(name="diff_endpoint_pipeline", webhooks=webhooks)
+        assert len(pipeline.webhooks) == 2
+
+    def test_pipeline_same_endpoint_different_name_allowed(self):
+        """Test that same endpoint with different names is allowed."""
+        webhooks = [
+            WebhookPipelineAction(
+                name="hook-a",
+                branch="main",
+                on='payload.action == "create"',
+                transform='{"step": {"k": "v"}}',
+                webhook_endpoint="linear_issues",
+            ),
+            WebhookPipelineAction(
+                name="hook-b",
+                branch="main",
+                on='payload.action == "update"',
+                transform='{"step": {"k": "v"}}',
+                webhook_endpoint="linear_issues",
+            ),
+        ]
+        pipeline = Pipeline(name="diff_name_pipeline", webhooks=webhooks)
+        assert len(pipeline.webhooks) == 2
+
+    def test_pipeline_data_with_webhooks(self):
+        """Test PipelineData serialization with webhooks."""
+        webhooks = [
+            WebhookPipelineAction(
+                name="data-hook",
+                branch="main",
+                on='payload.type == "message"',
+                transform='{"chat_step": {"channel": payload.channel, "text": payload.text}}',
+                webhook_endpoint="slack_events",
+            ),
+        ]
+        data = PipelineData(
+            name="data_webhook_pipeline",
+            webhooks=webhooks,
+        )
+
+        dumped = data.model_dump()
+        assert "webhooks" in dumped
+        assert len(dumped["webhooks"]) == 1
+        assert dumped["webhooks"][0]["name"] == "data-hook"
+        assert dumped["webhooks"][0]["webhook_endpoint"] == "slack_events"
+
+    def test_pipeline_data_without_webhooks(self):
+        """Test PipelineData with no webhooks defaults to empty list."""
+        data = PipelineData(name="plain_pipeline")
+        assert data.webhooks == []
+
+        dumped = data.model_dump()
+        assert dumped["webhooks"] == []
+
+    def test_pipeline_webhooks_in_dsl_output(self):
+        """Test that webhooks appear in the full DSL output structure."""
+        webhooks = [
+            WebhookPipelineAction(
+                name="dsl-hook",
+                branch="main",
+                on='payload.state == "alerting"',
+                transform='{"alert_step": {"alertname": payload.alerts[0].labels.alertname, "severity": payload.alerts[0].labels.severity}}',
+                webhook_endpoint="grafana_alerts",
+            ),
+        ]
+        pipeline = Pipeline(name="dsl_webhook_pipeline", webhooks=webhooks)
+
+        @pipeline.step
+        def alert_step(alertname: str, severity: str) -> str:
+            return f"alerted: {alertname} ({severity})"
+
+        pipelines_dict = {
+            "dsl_webhook_pipeline": PipelineData(
+                name=pipeline.name,
+                rid=pipeline.rid,
+                description=pipeline.description,
+                webhooks=pipeline.webhooks,
+            ).model_dump()
+        }
+
+        dsl_output = {
+            "steps": {"alert_step": STEP_REGISTRY["alert_step"].step_data.model_dump()},
+            "pipelines": pipelines_dict,
+        }
+
+        # Verify webhooks in pipeline output
+        p_out = dsl_output["pipelines"]["dsl_webhook_pipeline"]
+        assert "webhooks" in p_out
+        assert len(p_out["webhooks"]) == 1
+        assert p_out["webhooks"][0]["name"] == "dsl-hook"
+        assert p_out["webhooks"][0]["webhook_endpoint"] == "grafana_alerts"
+
+        # Verify JSON round-trip
+        parsed = json.loads(json.dumps(dsl_output))
+        assert parsed["pipelines"]["dsl_webhook_pipeline"]["webhooks"][0]["name"] == "dsl-hook"
+
+    def test_pipeline_webhooks_in_repr(self):
+        """Test that Pipeline repr includes webhooks."""
+        webhooks = [
+            WebhookPipelineAction(
+                name="repr-hook",
+                branch="main",
+                on="true",
+                transform='{"process_step": {"issue_url": payload.data.url}}',
+                webhook_endpoint="linear_issues",
+            ),
+        ]
+        pipeline = Pipeline(name="repr_webhook_test", webhooks=webhooks)
+        repr_str = repr(pipeline)
+        assert "repr-hook" in repr_str
+
+    def test_webhook_invalid_on_rejected(self) -> None:
+        """Constructing with an invalid 'on' expression should raise."""
+        with pytest.raises(ValueError, match="Invalid CEL expression in 'on'"):
+            WebhookPipelineAction(
+                name="bad-on",
+                branch="main",
+                on="payload.type ==",
+                transform='{"step": {"k": "v"}}',
+                webhook_endpoint="ep",
+            )
+
+    def test_webhook_invalid_transform_rejected(self) -> None:
+        """Constructing with an invalid 'transform' expression should raise."""
+        with pytest.raises(ValueError, match="Invalid CEL expression in 'transform'"):
+            WebhookPipelineAction(
+                name="bad-transform",
+                branch="main",
+                on="true",
+                transform='{"unclosed: map',
+                webhook_endpoint="ep",
+            )
 
 
 if __name__ == "__main__":

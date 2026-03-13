@@ -302,6 +302,50 @@ All fields are optional:
 | `storage_request` | Storage request | `"50Gi"` |
 | `storage_limit` | Storage limit | `"100Gi"` |
 
+### WebhookPipelineActions
+
+Pipelines can be triggered by external webhook events. WebhookPipelineAction endpoints (signature verification, secrets, idempotency) are configured in Console. The SDK declares **actions** that reference an endpoint by name and define filtering/transformation logic via CEL.
+
+```python
+from bridge_sdk import Pipeline, WebhookPipelineAction
+
+pipeline = Pipeline(
+    name="on_issue_create",
+    webhooks=[
+        WebhookPipelineAction(
+            name="linear-issues",
+            # branch determines where this webhook is indexed from and which
+            # version of the pipeline code runs when it fires. The webhook
+            # won't exist until this branch is indexed.
+            branch="main",
+            on='payload.type == "Issue" && payload.action == "create"',
+            transform='{"process_issue": {"issue_id": payload.data.id, "title": payload.data.title}}',
+            webhook_endpoint="linear_issues",
+        ),
+    ],
+)
+```
+
+Each webhook action uses [CEL](https://cel.dev/) expressions that receive `payload` (the parsed JSON body) and `headers` (HTTP headers as `map(string, string)`):
+
+- **`name`** — Unique name for this webhook action within the pipeline + branch.
+- **`branch`** — The git branch this webhook is indexed from and whose pipeline code runs when it fires. The webhook only exists after that branch is indexed, and incoming events execute the pipeline version from that branch. This lets you run different versions of the same pipeline (e.g. `"main"` for development, `"production"` for stable).
+- **`on`** — Returns `bool`. The action fires only when this evaluates to `true`.
+- **`transform`** — Returns `map(string, map(string, dyn))` keyed by step name. Maps webhook payload fields into step inputs.
+- **`webhook_endpoint`** — Name of the webhook endpoint configured in Console (e.g. `"linear_issues"`).
+
+```python
+WebhookPipelineAction(
+    name="custom-alerts",
+    branch="staging",
+    on='payload.status == "firing" && payload.severity == "critical"',
+    transform='{"handle_alert": {"alert_id": payload.alert_id, "message": payload.message}}',
+    webhook_endpoint="monitoring_alerts",
+)
+```
+
+See `examples/webhook_example.py` and `examples/webhook_generic_example.py` for complete working examples.
+
 ### Async Steps
 
 ```python
@@ -520,6 +564,7 @@ from bridge_sdk import (
     StepFunction,      # Type for decorated step functions
     StepData,          # Pydantic model for step metadata
     SandboxDefinition, # Optional compute resources for a step's sandbox
+    WebhookPipelineAction,           # WebhookPipelineAction action definition
     STEP_REGISTRY,     # Global registry of discovered steps
     get_dsl_output,    # Generate DSL from registry
 
