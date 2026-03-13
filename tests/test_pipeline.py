@@ -849,12 +849,12 @@ class TestPipelineWebhookPipelineActions:
         assert dumped["webhooks"][0]["webhook_endpoint"] == "slack_events"
 
     def test_pipeline_data_without_webhooks(self):
-        """Test PipelineData with no webhooks omits the field when exclude_none."""
+        """Test PipelineData with no webhooks defaults to empty list."""
         data = PipelineData(name="plain_pipeline")
-        assert data.webhooks is None
+        assert data.webhooks == []
 
-        dumped = data.model_dump(exclude_none=True)
-        assert "webhooks" not in dumped
+        dumped = data.model_dump()
+        assert dumped["webhooks"] == []
 
     def test_pipeline_webhooks_in_dsl_output(self):
         """Test that webhooks appear in the full DSL output structure."""
