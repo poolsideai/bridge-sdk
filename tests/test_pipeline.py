@@ -665,8 +665,8 @@ class TestPipelineStepSandboxDefinition:
 # =============================================================================
 
 
-class TestWebhookPipelineActionModel:
-    """Tests for the WebhookPipelineAction Pydantic model."""
+class TestPipelineWebhookPipelineActions:
+    """Tests for WebhookPipelineAction model, Pipeline integration, and CEL validation."""
 
     def test_webhook_minimal(self):
         """Test WebhookPipelineAction with all required fields."""
@@ -703,10 +703,6 @@ class TestWebhookPipelineActionModel:
         parsed = json.loads(json.dumps(dumped))
         assert parsed["name"] == "serial-hook"
         assert parsed["webhook_endpoint"] == "stripe_invoices"
-
-
-class TestPipelineWebhookPipelineActions:
-    """Tests for webhooks on Pipeline and PipelineData."""
 
     def test_pipeline_with_webhooks(self):
         """Test Pipeline instantiation with webhooks."""
@@ -916,6 +912,28 @@ class TestPipelineWebhookPipelineActions:
         pipeline = Pipeline(name="repr_webhook_test", webhooks=webhooks)
         repr_str = repr(pipeline)
         assert "repr-hook" in repr_str
+
+    def test_webhook_invalid_on_rejected(self) -> None:
+        """Constructing with an invalid 'on' expression should raise."""
+        with pytest.raises(ValueError, match="Invalid CEL expression in 'on'"):
+            WebhookPipelineAction(
+                name="bad-on",
+                branch="main",
+                on="payload.type ==",
+                transform='{"step": {"k": "v"}}',
+                webhook_endpoint="ep",
+            )
+
+    def test_webhook_invalid_transform_rejected(self) -> None:
+        """Constructing with an invalid 'transform' expression should raise."""
+        with pytest.raises(ValueError, match="Invalid CEL expression in 'transform'"):
+            WebhookPipelineAction(
+                name="bad-transform",
+                branch="main",
+                on="true",
+                transform='{"unclosed: map',
+                webhook_endpoint="ep",
+            )
 
 
 if __name__ == "__main__":

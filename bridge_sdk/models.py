@@ -28,7 +28,10 @@ Use whichever you prefer:
 
 from typing import Annotated, Literal, Optional, Union
 
-from pydantic import BaseModel, Field, TypeAdapter
+from pydantic import BaseModel, Field, TypeAdapter, model_validator
+
+from celpy import Environment as CelEnvironment
+from celpy import celtypes
 
 from bridge_sdk.proto import bridge_sidecar_pb2
 
@@ -130,6 +133,21 @@ class WebhookPipelineAction(BaseModel):
 
     webhook_endpoint: str
     """Name of the webhook endpoint configured in Console."""
+
+    @model_validator(mode="after")
+    def _validate_cel_expressions(self) -> "WebhookPipelineAction":
+        env = CelEnvironment(annotations={
+            "payload": celtypes.Value,
+            "headers": celtypes.MapType,
+        })
+        for field_name in ("on", "transform"):
+            try:
+                env.compile(getattr(self, field_name))
+            except Exception as e:
+                raise ValueError(
+                    f"Invalid CEL expression in '{field_name}': {e}"
+                ) from e
+        return self
 
 
 class ImageURLContent(BaseModel):
