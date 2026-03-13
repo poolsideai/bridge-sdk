@@ -20,6 +20,7 @@ from typing import (
 )
 from typing_extensions import ParamSpec, TypeVar
 
+from bridge_sdk.eval_binding import EvalBindingSpec
 from bridge_sdk.models import SandboxDefinition
 from bridge_sdk.step_function import StepFunction, STEP_REGISTRY, make_step_function
 
@@ -39,6 +40,7 @@ def step(
     metadata: dict[str, Any] | None = None,
     credential_bindings: dict[str, str] | None = None,
     sandbox_definition: SandboxDefinition | None = None,
+    eval_bindings: list[EvalBindingSpec] | None = None,
 ) -> StepFunction[P, R]:
     """Overload for usage as @step (no parentheses)."""
     ...
@@ -55,6 +57,7 @@ def step(
     metadata: dict[str, Any] | None = None,
     credential_bindings: dict[str, str] | None = None,
     sandbox_definition: SandboxDefinition | None = None,
+    eval_bindings: list[EvalBindingSpec] | None = None,
 ) -> Callable[[Callable[P, R]], StepFunction[P, R]]:
     """Overload for usage as @step(...)"""
     ...
@@ -71,6 +74,7 @@ def step(
     metadata: dict[str, Any] | None = None,
     credential_bindings: dict[str, str] | None = None,
     sandbox_definition: SandboxDefinition | None = None,
+    eval_bindings: list[EvalBindingSpec] | None = None,
 ) -> StepFunction[P, R] | Callable[[Callable[P, R]], StepFunction[P, R]]:
     """Decorator for configuring a Step with execution metadata.
 
@@ -87,6 +91,9 @@ def step(
         credential_bindings: Optional credential name to ID mappings.
         sandbox_definition: Optional inline sandbox definition specifying Docker image
             and resource requirements for this step's execution environment.
+        eval_bindings: Optional eval bindings for this step. Each entry may be:
+            - EvalFunction | str (condition defaults to true)
+            - (EvalFunction | str, Condition | str)
 
     Returns:
         A StepFunction wrapper with step_data and on_invoke_step attributes.
@@ -103,6 +110,7 @@ def step(
             metadata=metadata,
             credential_bindings=credential_bindings,
             sandbox_definition=sandbox_definition,
+            eval_bindings=eval_bindings,
         )
 
     # If func is actually a callable, we were used as @step with no parentheses

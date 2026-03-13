@@ -28,6 +28,7 @@ try:
 except ImportError:
     import tomli as tomllib  # type: ignore[import-not-found,no-redef]
 
+from bridge_sdk.eval_function import EVAL_REGISTRY, EvalFunction
 from bridge_sdk.step_function import STEP_REGISTRY, StepFunction
 from bridge_sdk.pipeline import PIPELINE_REGISTRY, Pipeline, PipelineData
 
@@ -231,19 +232,29 @@ def cmd_config_get_dsl(args):
         step_name: sf.step_data.model_dump() for (step_name, sf) in steps.items()
     }
 
-    # Build DSL dictionary with pipelines (metadata only)
+    # Build DSL dictionary with pipelines (metadata only + eval bindings)
     pipelines_dict = {
         pname: PipelineData(
-            name=p.name, rid=p.rid, description=p.description,
+            name=p.name,
+            rid=p.rid,
+            description=p.description,
+            eval_bindings=getattr(p, "_eval_bindings", []),
             webhooks=p.webhooks or None,
         ).model_dump()
         for pname, p in pipelines.items()
     }
 
-    # Combined output with both steps and pipelines
+    # Build DSL dictionary with evals
+    evals_dict = {
+        eval_name: ef.eval_data.model_dump()
+        for eval_name, ef in EVAL_REGISTRY.items()
+    }
+
+    # Combined output with steps, pipelines, and evals
     dsl_dict: Dict[str, Any] = {
         "steps": steps_dict,
         "pipelines": pipelines_dict,
+        "evals": evals_dict,
     }
 
     dsl_json = json.dumps(dsl_dict, indent=2)
@@ -345,6 +356,56 @@ async def cmd_run_step(args):
         sys.exit(1)
 
 
+async def cmd_run_eval(args):
+    """Handle 'eval run' command to execute an eval."""
+    modules = get_modules_from_args(args)
+    if not modules:
+        print(
+            "Error: No modules specified. Use --modules or configure [tool.bridge] in pyproject.toml"
+        )
+        sys.exit(1)
+
+    # Import modules to populate registries
+    discover_steps_and_pipelines(modules)
+
+    eval_name = args.eval
+    if eval_name not in EVAL_REGISTRY:
+        print(f"Error: Eval '{eval_name}' not found in modules '{modules}'")
+        print(f"Available evals: {', '.join(EVAL_REGISTRY.keys())}")
+        sys.exit(1)
+
+    eval_func = EVAL_REGISTRY[eval_name]
+
+    # Read context JSON
+    try:
+        if args.context.startswith("@"):
+            context_path = args.context[1:]
+            with open(context_path, "r") as f:
+                context_json = f.read()
+        else:
+            context_json = args.context
+    except FileNotFoundError:
+        print(f"Error: Context file not found: {args.context[1:]}")
+        sys.exit(1)
+
+    try:
+        result = await eval_func.on_invoke_eval(context=context_json)
+        print(f"Eval '{eval_name}' executed successfully")
+        print(f"Result: {result}")
+
+        if args.output_file:
+            output_path = Path(args.output_file)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(result)
+            print(f"Result written to {output_path}")
+    except Exception as e:
+        print(f"Error executing eval '{eval_name}': {e}")
+        import traceback
+
+        traceback.print_exc()
+        sys.exit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="CLI for discovering and running Steps"
@@ -393,6 +454,31 @@ def main():
     )
     run_parser.add_argument("--output-file", help="Path to write the step result to")
     run_parser.set_defaults(func=cmd_run_step)
+
+    def add_eval_run_arguments(eval_run_parser):
+        eval_run_parser.add_argument(
+            "--eval", required=True, help="Name of the eval to run"
+        )
+        eval_run_parser.add_argument(
+            "--context",
+            required=True,
+            help="JSON context string, or @filepath to read from file",
+        )
+        eval_run_parser.add_argument(
+            "--modules",
+            nargs="+",
+            help="Module paths to discover evals from",
+        )
+        eval_run_parser.add_argument(
+            "--output-file", help="Path to write the eval result to"
+        )
+        eval_run_parser.set_defaults(func=cmd_run_eval)
+
+    # 'eval run' command
+    eval_parser = subparsers.add_parser("eval", help="Eval commands")
+    eval_subparsers = eval_parser.add_subparsers(dest="eval_command")
+    eval_run_parser = eval_subparsers.add_parser("run", help="Run a specific eval")
+    add_eval_run_arguments(eval_run_parser)
 
     args = parser.parse_args()
 

@@ -16,11 +16,12 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, Optional, overload
+from typing import Any, Callable, Dict, List, Optional, overload
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing_extensions import ParamSpec, TypeVar
 
+from bridge_sdk.eval_binding import EvalBindingData, EvalBindingSpec, normalize_eval_bindings
 from bridge_sdk.models import SandboxDefinition, Webhook
 from bridge_sdk.step_function import StepFunction, make_step_function
 
@@ -67,6 +68,7 @@ class Pipeline:
         name: str,
         rid: str | None = None,
         description: str | None = None,
+        eval_bindings: list[EvalBindingSpec] | None = None,
         webhooks: list[Webhook] | None = None,
     ):
         """Initialize a Pipeline.
@@ -77,11 +79,16 @@ class Pipeline:
                 backend will use this rid instead of generating a new one.
                 This enables renaming pipelines while preserving their identity.
             description: Optional human-readable description.
+            eval_bindings: Optional eval bindings for this pipeline. Each entry
+                may be:
+                - EvalFunction | str (condition defaults to true)
+                - (EvalFunction | str, Condition | str)
             webhooks: Optional list of webhook triggers for this pipeline.
         """
         self.name = name
         self.rid = rid
         self.description = description
+        self._eval_bindings = normalize_eval_bindings(eval_bindings)
         self.webhooks = webhooks or []
         # Auto-register this pipeline
         PIPELINE_REGISTRY[name] = self
@@ -99,6 +106,7 @@ class Pipeline:
         metadata: dict[str, Any] | None = ...,
         credential_bindings: dict[str, str] | None = ...,
         sandbox_definition: SandboxDefinition | None = ...,
+        eval_bindings: list[EvalBindingSpec] | None = ...,
     ) -> StepFunction[P, R]:
         """Overload for usage as @pipeline.step (no parentheses)."""
         ...
@@ -115,6 +123,7 @@ class Pipeline:
         metadata: dict[str, Any] | None = ...,
         credential_bindings: dict[str, str] | None = ...,
         sandbox_definition: SandboxDefinition | None = ...,
+        eval_bindings: list[EvalBindingSpec] | None = ...,
     ) -> Callable[[Callable[P, R]], StepFunction[P, R]]:
         """Overload for usage as @pipeline.step(...)"""
         ...
@@ -131,6 +140,7 @@ class Pipeline:
         metadata: dict[str, Any] | None = None,
         credential_bindings: dict[str, str] | None = None,
         sandbox_definition: SandboxDefinition | None = None,
+        eval_bindings: list[EvalBindingSpec] | None = None,
     ) -> StepFunction[P, R] | Callable[[Callable[P, R]], StepFunction[P, R]]:
         """Decorator for defining a step associated with this pipeline.
 
@@ -149,6 +159,7 @@ class Pipeline:
                 credential_bindings=credential_bindings,
                 pipeline_name=self.name,
                 sandbox_definition=sandbox_definition,
+                eval_bindings=eval_bindings,
             )
             return sf
 
@@ -183,6 +194,9 @@ class PipelineData(BaseModel):
 
     description: Optional[str] = None
     """Optional human-readable description."""
+
+    eval_bindings: List[EvalBindingData] = Field(default_factory=list)
+    """Eval bindings attached to this pipeline."""
 
     webhooks: Optional[list[Webhook]] = None
     """Optional list of webhook trigger definitions."""
