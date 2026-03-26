@@ -17,8 +17,8 @@
 This module shows how to:
 1. Define webhook actions on a Pipeline to trigger it from external events
 2. Reference webhook endpoints configured in Console by name
-3. Use CEL ``on`` expressions to filter specific webhook payloads
-4. Use CEL ``transform`` expressions to extract step inputs from payloads
+3. Use CEL ``on`` expressions to filter specific webhook requests
+4. Use CEL ``transform`` expressions to extract step inputs from requests
 5. Route different webhook sources to different first steps that normalise
    into a shared downstream step
 """
@@ -45,8 +45,9 @@ from bridge_sdk.bridge_sidecar_client import BridgeSidecarClient
 #                keyed by step name (what inputs should each step receive?)
 #
 # CEL expressions can reference:
-#   - payload: the parsed JSON body of the webhook request
 #   - headers: HTTP headers as map(string, string)
+#   - body: raw request body as bytes (use string(body) to convert)
+#   - body_json: parsed JSON body as map(string, dyn)
 
 pipeline = Pipeline(
     name="issue_triage",
@@ -60,14 +61,14 @@ pipeline = Pipeline(
             name="linear-autofix",
             branch="main",
             on=(
-                'payload.type == "Issue"'
-                ' && payload.action == "create"'
-                ' && payload.data.labels.exists(l, l.name == "autofix")'
+                'body_json.type == "Issue"'
+                ' && body_json.action == "create"'
+                ' && body_json.data.labels.exists(l, l.name == "autofix")'
             ),
             # Both DAG root steps must receive input; fetch_pr gets an empty
             # object so it returns None.
             transform=(
-                '{"fetch_issue": {"issue_id": payload.data.id, "title": payload.data.title},'
+                '{"fetch_issue": {"issue_id": body_json.data.id, "title": body_json.data.title},'
                 ' "fetch_pr": {}}'
             ),
             webhook_endpoint="linear_issues",
@@ -81,16 +82,16 @@ pipeline = Pipeline(
             branch="production",
             on=(
                 'headers["x-github-event"] == "pull_request"'
-                ' && payload.action == "opened"'
-                ' && payload.pull_request.base.ref == "main"'
+                ' && body_json.action == "opened"'
+                ' && body_json.pull_request.base.ref == "main"'
             ),
             # Both DAG root steps must receive input; fetch_issue gets an
             # empty object so it returns None.
             transform=(
                 '{"fetch_issue": {},'
-                ' "fetch_pr": {"pr_number": payload.pull_request.number,'
-                ' "repo": payload.repository.full_name,'
-                ' "title": payload.pull_request.title}}'
+                ' "fetch_pr": {"pr_number": body_json.pull_request.number,'
+                ' "repo": body_json.repository.full_name,'
+                ' "title": body_json.pull_request.title}}'
             ),
             webhook_endpoint="github_prs",
         ),
