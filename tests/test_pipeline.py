@@ -674,28 +674,28 @@ class TestPipelineWebhookPipelineActions:
             name="my-hook",
             branch="main",
             on="true",
-            transform='{"triage_step": {"issue_url": payload.data.url}}',
+            transform='{"triage_step": {"issue_url": body_json.data.url}}',
             webhook_endpoint="linear_issues",
         )
         assert wh.name == "my-hook"
         assert wh.branch == "main"
         assert wh.webhook_endpoint == "linear_issues"
         assert wh.on == "true"
-        assert wh.transform == '{"triage_step": {"issue_url": payload.data.url}}'
+        assert wh.transform == '{"triage_step": {"issue_url": body_json.data.url}}'
 
     def test_webhook_serialization(self):
         """Test WebhookPipelineAction model serialization round-trip."""
         wh = WebhookPipelineAction(
             name="serial-hook",
             branch="main",
-            on='payload.type == "invoice.paid"',
-            transform='{"billing_step": {"invoice_id": payload.data.object.id, "amount": payload.data.object.amount_paid}}',
+            on='body_json.type == "invoice.paid"',
+            transform='{"billing_step": {"invoice_id": body_json.data.object.id, "amount": body_json.data.object.amount_paid}}',
             webhook_endpoint="stripe_invoices",
         )
         dumped = wh.model_dump()
         assert dumped["name"] == "serial-hook"
         assert dumped["webhook_endpoint"] == "stripe_invoices"
-        assert dumped["on"] == 'payload.type == "invoice.paid"'
+        assert dumped["on"] == 'body_json.type == "invoice.paid"'
         assert "provider" not in dumped
         assert "idempotency_key" not in dumped
         assert "filter" not in dumped
@@ -710,8 +710,8 @@ class TestPipelineWebhookPipelineActions:
             WebhookPipelineAction(
                 name="on-push",
                 branch="main",
-                on='payload.ref == "refs/heads/main"',
-                transform='{"index_step": {"repo": payload.repository.full_name, "commit_sha": payload.head_commit.id}}',
+                on='body_json.ref == "refs/heads/main"',
+                transform='{"index_step": {"repo": body_json.repository.full_name, "commit_sha": body_json.head_commit.id}}',
                 webhook_endpoint="github_pushes",
             ),
         ]
@@ -732,7 +732,7 @@ class TestPipelineWebhookPipelineActions:
                 name="hook-a",
                 branch="main",
                 on="true",
-                transform='{"triage_step": {"issue_id": payload.data.id}}',
+                transform='{"triage_step": {"issue_id": body_json.data.id}}',
                 webhook_endpoint="linear_issues",
             ),
         ]
@@ -748,15 +748,15 @@ class TestPipelineWebhookPipelineActions:
             WebhookPipelineAction(
                 name="linear-hook",
                 branch="main",
-                on='payload.type == "Issue"',
-                transform='{"triage_step": {"issue_id": payload.data.id, "title": payload.data.title}}',
+                on='body_json.type == "Issue"',
+                transform='{"triage_step": {"issue_id": body_json.data.id, "title": body_json.data.title}}',
                 webhook_endpoint="linear_issues",
             ),
             WebhookPipelineAction(
                 name="github-hook",
                 branch="main",
-                on='payload.action == "opened"',
-                transform='{"review_step": {"pr_number": payload.pull_request.number, "head_sha": payload.pull_request.head.sha}}',
+                on='body_json.action == "opened"',
+                transform='{"review_step": {"pr_number": body_json.pull_request.number, "head_sha": body_json.pull_request.head.sha}}',
                 webhook_endpoint="github_prs",
             ),
         ]
@@ -811,14 +811,14 @@ class TestPipelineWebhookPipelineActions:
             WebhookPipelineAction(
                 name="hook-a",
                 branch="main",
-                on='payload.action == "create"',
+                on='body_json.action == "create"',
                 transform='{"step": {"k": "v"}}',
                 webhook_endpoint="linear_issues",
             ),
             WebhookPipelineAction(
                 name="hook-b",
                 branch="main",
-                on='payload.action == "update"',
+                on='body_json.action == "update"',
                 transform='{"step": {"k": "v"}}',
                 webhook_endpoint="linear_issues",
             ),
@@ -832,8 +832,8 @@ class TestPipelineWebhookPipelineActions:
             WebhookPipelineAction(
                 name="data-hook",
                 branch="main",
-                on='payload.type == "message"',
-                transform='{"chat_step": {"channel": payload.channel, "text": payload.text}}',
+                on='body_json.type == "message"',
+                transform='{"chat_step": {"channel": body_json.channel, "text": body_json.text}}',
                 webhook_endpoint="slack_events",
             ),
         ]
@@ -862,8 +862,8 @@ class TestPipelineWebhookPipelineActions:
             WebhookPipelineAction(
                 name="dsl-hook",
                 branch="main",
-                on='payload.state == "alerting"',
-                transform='{"alert_step": {"alertname": payload.alerts[0].labels.alertname, "severity": payload.alerts[0].labels.severity}}',
+                on='body_json.state == "alerting"',
+                transform='{"alert_step": {"alertname": body_json.alerts[0].labels.alertname, "severity": body_json.alerts[0].labels.severity}}',
                 webhook_endpoint="grafana_alerts",
             ),
         ]
@@ -905,7 +905,7 @@ class TestPipelineWebhookPipelineActions:
                 name="repr-hook",
                 branch="main",
                 on="true",
-                transform='{"process_step": {"issue_url": payload.data.url}}',
+                transform='{"process_step": {"issue_url": body_json.data.url}}',
                 webhook_endpoint="linear_issues",
             ),
         ]
@@ -919,7 +919,7 @@ class TestPipelineWebhookPipelineActions:
             WebhookPipelineAction(
                 name="bad-on",
                 branch="main",
-                on="payload.type ==",
+                on="body_json.type ==",
                 transform='{"step": {"k": "v"}}',
                 webhook_endpoint="ep",
             )
