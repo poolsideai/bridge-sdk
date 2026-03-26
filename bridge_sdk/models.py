@@ -97,7 +97,7 @@ class WebhookPipelineAction(BaseModel):
         on: CEL expression evaluated against the request. Must return bool.
             The action triggers only when this evaluates to true.
             Available variables: ``headers`` (request headers), ``body`` (raw body
-            string), ``body_json`` (parsed JSON body).
+            bytes), ``body_json`` (parsed JSON body).
         transform: CEL expression that transforms the request into step inputs.
             Must return ``map(string, map(string, dyn))`` keyed by step name.
             Available variables: same as ``on``.
@@ -141,7 +141,7 @@ class WebhookPipelineAction(BaseModel):
     def _validate_cel_expressions(self) -> "WebhookPipelineAction":
         env = CelEnvironment(annotations={
             "headers": celtypes.MapType,
-            "body": celtypes.StringType,
+            "body": celtypes.BytesType,
             "body_json": celtypes.Value,
         })
         for field_name in ("on", "transform"):
