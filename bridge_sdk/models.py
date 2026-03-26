@@ -94,10 +94,13 @@ class WebhookPipelineAction(BaseModel):
         name: Unique name for this webhook action within the pipeline + branch.
         branch: The git branch this webhook is indexed from and whose pipeline
             code runs when it fires.
-        on: CEL expression evaluated against the payload and headers.
-            Must return bool. The action triggers only when this evaluates to true.
-        transform: CEL expression that transforms the payload into step inputs.
+        on: CEL expression evaluated against the request. Must return bool.
+            The action triggers only when this evaluates to true.
+            Available variables: ``headers`` (request headers), ``body`` (raw body
+            string), ``body_json`` (parsed JSON body).
+        transform: CEL expression that transforms the request into step inputs.
             Must return ``map(string, map(string, dyn))`` keyed by step name.
+            Available variables: same as ``on``.
         webhook_endpoint: Name of the webhook endpoint configured in Console
             (e.g. ``"linear_issues"``).
 
@@ -111,8 +114,8 @@ class WebhookPipelineAction(BaseModel):
                 WebhookPipelineAction(
                     name="linear-issues",
                     branch="main",
-                    on='payload.type == "Issue" && payload.action == "update"',
-                    transform='{"triage_step": {"issue": payload.data}}',
+                    on='body_json.type == "Issue" && body_json.action == "update"',
+                    transform='{"triage_step": {"issue": body_json.data}}',
                     webhook_endpoint="linear_issues",
                 ),
             ],
@@ -129,7 +132,7 @@ class WebhookPipelineAction(BaseModel):
     """CEL expression that determines whether this action should fire. Must return bool."""
 
     transform: str
-    """CEL expression that transforms the payload into step inputs. Must return map(string, map(string, dyn))."""
+    """CEL expression that transforms the request into step inputs. Must return map(string, map(string, dyn))."""
 
     webhook_endpoint: str
     """Name of the webhook endpoint configured in Console."""
@@ -137,8 +140,9 @@ class WebhookPipelineAction(BaseModel):
     @model_validator(mode="after")
     def _validate_cel_expressions(self) -> "WebhookPipelineAction":
         env = CelEnvironment(annotations={
-            "payload": celtypes.Value,
             "headers": celtypes.MapType,
+            "body": celtypes.StringType,
+            "body_json": celtypes.Value,
         })
         for field_name in ("on", "transform"):
             try:
