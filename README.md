@@ -154,8 +154,8 @@ This keeps your `tool.bridge` config short, but you must remember to update `__i
 |---------|-------------|
 | `bridge check` | Validate project setup |
 | `bridge config get-dsl` | Export step, pipeline, and eval definitions as JSON |
-| `bridge run --step <name> --input <json> --results <json>` | Execute a step |
-| `bridge eval run --eval <name> --context <json>` | Execute an eval |
+| `bridge run --step <name> (--input <json>\|--input-file <path>) (--results <json>\|--results-file <path>)` | Execute a step |
+| `bridge eval run --eval <name> (--context <json>\|--context-file <path>)` | Execute an eval |
 
 ### Options
 
@@ -165,14 +165,20 @@ This keeps your `tool.bridge` config short, but you must remember to update `__i
 
 **`run`:**
 - `--step` - Step name (required)
-- `--input` - Input JSON (required)
+- `--input` - Input JSON string
+- `--input-file` - Path to input JSON file
 - `--results` - Cached results JSON from previous steps
 - `--results-file` - Path to results JSON file
+- Provide exactly one of `--input` or `--input-file`
+- Provide exactly one of `--results` or `--results-file`
 - `--output-file` - Write result to file
+- `--modules` - Override modules from config
 
 **`eval run`:**
 - `--eval` - Eval name (required)
-- `--context` - Context JSON string, or `@filepath` to read from file (required)
+- `--context` - Context JSON string, or `@filepath` to read from file
+- `--context-file` - Path to context JSON file
+- Provide exactly one of `--context` or `--context-file`
 - `--output-file` - Write result to file
 - `--modules` - Override modules from config
 
@@ -447,6 +453,15 @@ on_branch("main") | on_branch("staging")   # Either passes
 uv run bridge eval run \
   --eval quality_check \
   --context '{"step_name": "my_step", "step_input": {...}, "step_output": {...}, "metadata": {}}' \
+  --output-file /tmp/eval_result.json
+```
+
+Equivalent file-based invocation:
+
+```bash
+uv run bridge eval run \
+  --eval quality_check \
+  --context-file /tmp/eval_context.json \
   --output-file /tmp/eval_result.json
 ```
 
