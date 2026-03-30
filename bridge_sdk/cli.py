@@ -286,23 +286,43 @@ async def cmd_run_step(args):
         print(f"Available steps: {', '.join(steps.keys())}")
         sys.exit(1)
 
-    # Parse results JSON
+    if args.results and args.results_file:
+        print("Error: --results and --results-file are mutually exclusive")
+        sys.exit(1)
+
+    if args.input and args.input_file:
+        print("Error: --input and --input-file are mutually exclusive")
+        sys.exit(1)
+
+    # Parse results JSON and keep the raw JSON string for invocation.
     try:
         if args.results_file:
-            # Read from file
             with open(args.results_file, "r") as f:
-                cached_results = json.load(f)
+                results_json = f.read()
         elif args.results:
-            # Parse from command line
-            cached_results = json.loads(args.results)
+            results_json = args.results
         else:
             print("Error: Either --results or --results-file must be provided")
             sys.exit(1)
+        cached_results = json.loads(results_json) if results_json else {}
     except json.JSONDecodeError as e:
         print(f"Error parsing results JSON: {e}")
         sys.exit(1)
     except FileNotFoundError:
         print(f"Error: Results file not found: {args.results_file}")
+        sys.exit(1)
+
+    try:
+        if args.input_file:
+            with open(args.input_file, "r") as f:
+                input_json = f.read()
+        elif args.input is not None:
+            input_json = args.input
+        else:
+            print("Error: Either --input or --input-file must be provided")
+            sys.exit(1)
+    except FileNotFoundError:
+        print(f"Error: Input file not found: {args.input_file}")
         sys.exit(1)
 
     # 3. Get the step function
@@ -312,7 +332,7 @@ async def cmd_run_step(args):
     # Combine --input and --results into the final resolved input
     # Priority: --input values take precedence over --results
     try:
-        input_data = json.loads(args.input) if args.input else {}
+        input_data = json.loads(input_json) if input_json else {}
     except json.JSONDecodeError as e:
         print(f"Error parsing input JSON: {e}")
         sys.exit(1)
@@ -337,7 +357,7 @@ async def cmd_run_step(args):
 
     # 5. Call the step function
     try:
-        result = await step.on_invoke_step(input=args.input, step_results=args.results)
+        result = await step.on_invoke_step(input=input_json, step_results=results_json)
         print(f"Step '{args.step}' executed successfully")
         print(f"Result: {result}")
 
@@ -378,14 +398,24 @@ async def cmd_run_eval(args):
 
     # Read context JSON
     try:
-        if args.context.startswith("@"):
-            context_path = args.context[1:]
-            with open(context_path, "r") as f:
+        if args.context and args.context_file:
+            print("Error: --context and --context-file are mutually exclusive")
+            sys.exit(1)
+
+        if args.context_file:
+            with open(args.context_file, "r") as f:
                 context_json = f.read()
-        else:
+        elif args.context and args.context.startswith("@"):
+            with open(args.context[1:], "r") as f:
+                context_json = f.read()
+        elif args.context:
             context_json = args.context
+        else:
+            print("Error: Either --context or --context-file must be provided")
+            sys.exit(1)
     except FileNotFoundError:
-        print(f"Error: Context file not found: {args.context[1:]}")
+        missing = args.context_file if args.context_file else args.context[1:]
+        print(f"Error: Context file not found: {missing}")
         sys.exit(1)
 
     try:
@@ -446,7 +476,10 @@ def main():
     run_parser.add_argument(
         "--results-file", help="Path to JSON file containing cached results"
     )
-    run_parser.add_argument("--input", required=True, help="Input to the step")
+    run_parser.add_argument("--input", help="Input JSON for the step")
+    run_parser.add_argument(
+        "--input-file", help="Path to JSON file containing step input"
+    )
     run_parser.add_argument(
         "--modules",
         nargs="+",
@@ -461,8 +494,11 @@ def main():
         )
         eval_run_parser.add_argument(
             "--context",
-            required=True,
             help="JSON context string, or @filepath to read from file",
+        )
+        eval_run_parser.add_argument(
+            "--context-file",
+            help="Path to JSON file containing eval context",
         )
         eval_run_parser.add_argument(
             "--modules",
