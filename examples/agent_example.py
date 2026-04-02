@@ -23,7 +23,7 @@ This module shows how to:
 from typing import Annotated, Optional
 
 from bridge_sdk import Pipeline, step_result
-from bridge_sdk.bridge_sidecar_client import BridgeSidecarClient
+from bridge_sdk.bridge_execution_client import BridgeExecutionClient
 from bridge_sdk.proto.bridge_sidecar_pb2 import ContinueFrom, RunDetail
 from pydantic import BaseModel
 
@@ -64,7 +64,7 @@ class ContinuationInput(BaseModel):
 )
 def hello_world_agent() -> HelloWorldResult:
     """First step: Start an agent session and say hello."""
-    with BridgeSidecarClient() as client:
+    with BridgeExecutionClient() as client:
         _, session_id, res = client.start_agent("say hello", agent_name="Malibu")
         return HelloWorldResult(session_id=session_id, res=res)
 
@@ -83,7 +83,7 @@ def continuation_agent(
     This step depends on hello_world_agent via the step_result annotation.
     The DAG is automatically inferred from this dependency.
     """
-    with BridgeSidecarClient() as client:
+    with BridgeExecutionClient() as client:
         print(input)
         _, session_id, res = client.start_agent(
             "tell me what was done previously",

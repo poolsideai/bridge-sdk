@@ -17,7 +17,7 @@
 from typing import Annotated
 
 from bridge_sdk import Pipeline, step_result
-from bridge_sdk.bridge_sidecar_client import BridgeSidecarClient
+from bridge_sdk.bridge_execution_client import BridgeExecutionClient
 from bridge_sdk.proto.bridge_sidecar_pb2 import ContinueFrom, RunDetail
 from pydantic import BaseModel
 
@@ -50,7 +50,7 @@ def analyze_image() -> AnalyzeImageResult:
         },
     ]
 
-    with BridgeSidecarClient() as client:
+    with BridgeExecutionClient() as client:
         _, session_id, res = client.start_agent(
             prompt="Analyze the attached image.",
             agent_name="Malibu",
@@ -65,7 +65,7 @@ def followup(
     previous: Annotated[AnalyzeImageResult, step_result(analyze_image)],
 ) -> str:
     """Continue the conversation using the previous session id."""
-    with BridgeSidecarClient() as client:
+    with BridgeExecutionClient() as client:
         _, _, res = client.start_agent(
             prompt=input.prompt,
             agent_name="Malibu",

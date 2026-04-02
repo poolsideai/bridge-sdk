@@ -467,7 +467,7 @@ uv run bridge eval run \
 
 ## Calling Agents
 
-The `BridgeSidecarClient.start_agent()` method returns a tuple of `(_, session_id, status)`, where `status` is just a success/fail message, **not** the actual agent output.
+The `BridgeExecutionClient.start_agent()` method returns a tuple of `(_, session_id, status)`, where `status` is just a success/fail message, **not** the actual agent output.
 
 To get the agent's response, you must:
 1. Instruct the agent in the prompt to write its output to a specific file
@@ -476,7 +476,7 @@ To get the agent's response, you must:
 ```python
 import json
 from bridge_sdk import step
-from bridge_sdk.bridge_sidecar_client import BridgeSidecarClient
+from bridge_sdk.bridge_execution_client import BridgeExecutionClient
 
 OUTPUT_FILE = "/tmp/agent_output.json"
 
@@ -495,7 +495,7 @@ Output JSON structure:
 def run_agent() -> dict:
     prompt = PROMPT.format(output_file=OUTPUT_FILE)
 
-    with BridgeSidecarClient() as client:
+    with BridgeExecutionClient() as client:
         _, session_id, _ = client.start_agent(
             prompt=prompt,
             agent_name="my-agent"
@@ -518,7 +518,7 @@ Use `content_parts` to send text and image inputs alongside the prompt. Example 
 
 ```python
 from bridge_sdk import Pipeline
-from bridge_sdk.bridge_sidecar_client import BridgeSidecarClient
+from bridge_sdk.bridge_execution_client import BridgeExecutionClient
 
 pipeline = Pipeline(name="multimodal_agent_example")
 
@@ -534,7 +534,7 @@ def analyze_image() -> tuple[str, str]:
         },
     ]
 
-    with BridgeSidecarClient() as client:
+    with BridgeExecutionClient() as client:
         _, session_id, res = client.start_agent(
             prompt="Analyze the attached image.",
             agent_name="Malibu",
@@ -548,10 +548,10 @@ def analyze_image() -> tuple[str, str]:
 To continue an agent session (preserving context from a previous step):
 
 ```python
-from bridge_sdk.bridge_sidecar_client import BridgeSidecarClient
+from bridge_sdk.bridge_execution_client import BridgeExecutionClient
 from bridge_sdk.proto.bridge_sidecar_pb2 import ContinueFrom, RunDetail
 
-with BridgeSidecarClient() as client:
+with BridgeExecutionClient() as client:
     _, session_id, _ = client.start_agent(
         prompt=prompt,
         agent_name="my-agent",
@@ -567,7 +567,7 @@ with BridgeSidecarClient() as client:
 
 ### Experimental: sessions transport (feature-flagged)
 
-`BridgeSidecarClient` supports an opt-in sessions API path for `start_agent`.
+`BridgeExecutionClient` supports an opt-in sessions API path for `start_agent`.
 Default behavior remains sidecar gRPC.
 
 Enable sessions transport by setting:
@@ -622,7 +622,7 @@ from bridge_sdk import (
     sample,            # Condition: run on percentage of executions
 )
 
-from bridge_sdk.bridge_sidecar_client import BridgeSidecarClient
+from bridge_sdk.bridge_execution_client import BridgeExecutionClient
 from bridge_sdk.proto.bridge_sidecar_pb2 import ContinueFrom, RunDetail
 ```
 

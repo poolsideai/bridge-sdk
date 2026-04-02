@@ -15,7 +15,7 @@
 from typing import Annotated
 
 from bridge_sdk import step, step_result, SandboxDefinition
-from bridge_sdk.bridge_sidecar_client import BridgeSidecarClient
+from bridge_sdk.bridge_execution_client import BridgeExecutionClient
 from pydantic import BaseModel
 
 
@@ -102,7 +102,7 @@ def step_4(
     step_2_result: Annotated[Step2Output, step_result(step_2)],
 ) -> Step4Output:
     print("This was the output of step 2:", step_2_result.result)
-    with BridgeSidecarClient() as client:
+    with BridgeExecutionClient() as client:
         res = client.start_agent("say hello", agent_name="agent_1003_cc_v2_rc-fp8-tpr")
         print(res)
     return Step4Output(result=input_data.value)
