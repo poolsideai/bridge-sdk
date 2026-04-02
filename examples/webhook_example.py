@@ -21,6 +21,7 @@ This module shows how to:
 4. Use CEL ``transform`` expressions to extract step inputs from requests
 5. Route different webhook sources to different first steps that normalise
    into a shared downstream step
+6. Use ``idempotency_key`` and ``conflict_policy`` for action-level dedup
 """
 
 from typing import Annotated, Optional
@@ -94,6 +95,31 @@ pipeline = Pipeline(
                 ' "title": body_json.pull_request.title}}'
             ),
             webhook_endpoint="github_prs",
+        ),
+        # GitHub: idempotent action — if a PR is updated while the previous
+        # run is still in-flight, cancel the old run and start fresh.
+        # The idempotency_key is a CEL expression evaluated against the
+        # webhook payload that must return a string. Repeated deliveries
+        # producing the same key are deduplicated per the conflict_policy.
+        WebhookPipelineAction(
+            name="github-pr-sync",
+            branch="main",
+            on=(
+                'headers["x-github-event"] == "pull_request"'
+                ' && body_json.action == "synchronize"'
+            ),
+            transform=(
+                '{"fetch_issue": {},'
+                ' "fetch_pr": {"pr_number": body_json.pull_request.number,'
+                ' "repo": body_json.repository.full_name,'
+                ' "title": body_json.pull_request.title}}'
+            ),
+            webhook_endpoint="github_prs",
+            # Produce a deterministic key per PR so repeated pushes to the
+            # same PR are deduplicated.
+            idempotency_key='string(body_json.pull_request.number)',
+            # Terminate the running workflow and start a new one.
+            conflict_policy="terminate_existing",
         ),
     ],
 )
