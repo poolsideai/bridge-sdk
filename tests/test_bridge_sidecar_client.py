@@ -210,3 +210,109 @@ class TestStartAgentContentParts:
                 prompt="fail",
                 content_parts=[{"type": "text", "text": "should fail"}],
             )
+
+
+class FakeSessionsBridgeClient(BridgeSidecarClient):
+    def __init__(self):
+        super().__init__(
+            agent_transport="sessions",
+            api_base_url="https://api.example.com",
+            api_token="token",
+            sandbox_id="sandbox-123",
+        )
+        self.calls: list[dict] = []
+
+    def _sessions_request_json(self, method, path, *, query=None, body=None):
+        self.calls.append(
+            {
+                "method": method,
+                "path": path,
+                "query": query,
+                "body": body,
+            }
+        )
+        if method == "GET" and path == "/v0/agents":
+            assert query == {"name": "Malibu"}
+            return [{"id": "agent-123", "name": "Malibu"}]
+        if method == "POST" and path == "/v0/agents/agent-123/sessions":
+            return {"id": "session-456"}
+        raise AssertionError(f"unexpected request: {method} {path}")
+
+
+class TestStartAgentSessionsTransport:
+    def test_requires_sessions_config(self):
+        client = BridgeSidecarClient(agent_transport="sessions")
+        with pytest.raises(
+            RuntimeError, match="sessions transport requires BRIDGE_SDK_API_BASE_URL"
+        ):
+            client.start_agent(prompt="hello")
+
+    def test_starts_session_without_continue_from(self):
+        client = FakeSessionsBridgeClient()
+        agent_name, session_id, exit_result = client.start_agent(
+            prompt="say hello",
+            agent_name="Malibu",
+        )
+
+        assert agent_name == "Malibu"
+        assert session_id == "session-456"
+        assert exit_result == "scheduled"
+
+        assert len(client.calls) == 2
+        assert client.calls[1]["body"] == {
+            "type": "remote",
+            "prompt": "say hello",
+            "sandbox_id": "sandbox-123",
+        }
+
+    def test_maps_continue_from_no_compaction(self):
+        continue_from = bridge_sidecar_pb2.ContinueFrom(
+            previous_run_detail=bridge_sidecar_pb2.RunDetail(
+                agent_name="Malibu",
+                session_id="previous-session-1",
+            ),
+            continuation=bridge_sidecar_pb2.ContinueFrom.NoCompactionStrategy(),
+        )
+        client = FakeSessionsBridgeClient()
+        client.start_agent(
+            prompt="continue",
+            agent_name="Malibu",
+            continue_from=continue_from,
+        )
+
+        assert len(client.calls) == 2
+        assert client.calls[1]["body"]["continue_from"] == {
+            "previous_session_id": "previous-session-1",
+            "strategy": "no_compaction",
+        }
+
+    def test_rejects_continue_from_compaction(self):
+        continue_from = bridge_sidecar_pb2.ContinueFrom(
+            previous_run_detail=bridge_sidecar_pb2.RunDetail(
+                agent_name="Malibu",
+                session_id="previous-session-1",
+            ),
+            compaction=bridge_sidecar_pb2.ContinueFrom.CompactionStrategy(),
+        )
+        client = FakeSessionsBridgeClient()
+        with pytest.raises(ValueError, match="compaction is not supported"):
+            client.start_agent(
+                prompt="continue",
+                agent_name="Malibu",
+                continue_from=continue_from,
+            )
+
+    def test_rejects_content_parts_and_directory(self):
+        client = FakeSessionsBridgeClient()
+        with pytest.raises(ValueError, match="content_parts are not supported"):
+            client.start_agent(
+                prompt="continue",
+                agent_name="Malibu",
+                content_parts=[{"type": "text", "text": "x"}],
+            )
+        with pytest.raises(ValueError, match="directory is not supported"):
+            client.start_agent(
+                prompt="continue",
+                agent_name="Malibu",
+                directory="/tmp/work",
+            )

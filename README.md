@@ -565,6 +565,28 @@ with BridgeSidecarClient() as client:
     )
 ```
 
+### Experimental: sessions transport (feature-flagged)
+
+`BridgeSidecarClient` supports an opt-in sessions API path for `start_agent`.
+Default behavior remains sidecar gRPC.
+
+Enable sessions transport by setting:
+
+```bash
+export BRIDGE_SDK_AGENT_TRANSPORT=sessions
+export BRIDGE_SDK_API_BASE_URL=https://your-api-host
+export BRIDGE_SDK_API_TOKEN=...
+# exactly one of:
+export BRIDGE_SDK_SANDBOX_ID=...
+# or
+export BRIDGE_SDK_SANDBOX_DEFINITION_ID=...
+```
+
+Current limitations for sessions transport:
+- `content_parts` and `directory` are not supported.
+- `continue_from` supports no-compaction only.
+- return status is `"scheduled"` because the API schedules async execution.
+
 
 ## API Reference
 
