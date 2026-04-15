@@ -580,12 +580,22 @@ export BRIDGE_SDK_API_TOKEN=...
 export BRIDGE_SDK_SANDBOX_ID=...
 # or
 export BRIDGE_SDK_SANDBOX_DEFINITION_ID=...
+# optional: return immediately after scheduling instead of waiting for completion
+export BRIDGE_SDK_SESSIONS_ASYNC=false
+# optional: only used when BRIDGE_SDK_SESSIONS_ASYNC=false
+export BRIDGE_SDK_SESSIONS_WAIT_TIMEOUT_SECONDS=600
+export BRIDGE_SDK_SESSIONS_POLL_INTERVAL_SECONDS=1
 ```
 
 Current limitations for sessions transport:
 - `content_parts` and `directory` are not supported.
 - `continue_from` supports no-compaction only.
-- return status is `"scheduled"` because the API schedules async execution.
+- when `BRIDGE_SDK_SESSIONS_ASYNC=false` (default), `start_agent` waits for a
+  terminal session state and returns `"success"` or `"failure"` for sidecar parity.
+- when `BRIDGE_SDK_SESSIONS_ASYNC=true`, `start_agent` returns immediately with
+  `"scheduled"`.
+- `continue_from` in sessions mode requires `previous_session_id` to reference a
+  terminal session.
 
 
 ## API Reference

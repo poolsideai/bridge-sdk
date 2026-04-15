@@ -15,6 +15,7 @@
 """Client for Bridge agent execution transports."""
 import json
 import os
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -31,6 +32,27 @@ _API_BASE_URL_ENV_VAR = "BRIDGE_SDK_API_BASE_URL"
 _API_TOKEN_ENV_VAR = "BRIDGE_SDK_API_TOKEN"
 _SANDBOX_ID_ENV_VAR = "BRIDGE_SDK_SANDBOX_ID"
 _SANDBOX_DEFINITION_ID_ENV_VAR = "BRIDGE_SDK_SANDBOX_DEFINITION_ID"
+_SESSIONS_ASYNC_ENV_VAR = "BRIDGE_SDK_SESSIONS_ASYNC"
+_SESSIONS_WAIT_TIMEOUT_SECONDS_ENV_VAR = "BRIDGE_SDK_SESSIONS_WAIT_TIMEOUT_SECONDS"
+_SESSIONS_POLL_INTERVAL_SECONDS_ENV_VAR = "BRIDGE_SDK_SESSIONS_POLL_INTERVAL_SECONDS"
+_TERMINAL_SESSION_STATES = {"finished", "failed", "cancelled", "canceled", "invalid"}
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == "":
+        return default
+    try:
+        return float(raw)
+    except ValueError as err:
+        raise ValueError(f"{name} must be a number, got {raw!r}") from err
 
 
 
@@ -47,6 +69,9 @@ class BridgeExecutionClient:
         api_token: Optional[str] = None,
         sandbox_id: Optional[str] = None,
         sandbox_definition_id: Optional[str] = None,
+        sessions_async: Optional[bool] = None,
+        sessions_wait_timeout_seconds: Optional[float] = None,
+        sessions_poll_interval_seconds: Optional[float] = None,
     ):
         """
         Initialize the Bridge client.
@@ -60,6 +85,13 @@ class BridgeExecutionClient:
             api_token: Core API bearer token for sessions transport.
             sandbox_id: Existing sandbox ID for sessions transport.
             sandbox_definition_id: Sandbox definition ID for sessions transport.
+            sessions_async: When true, sessions transport returns immediately after
+                session scheduling. When false, waits for the session to reach a
+                terminal state before returning.
+            sessions_wait_timeout_seconds: Max seconds to wait for terminal state
+                when sessions_async is false.
+            sessions_poll_interval_seconds: Poll interval, in seconds, for terminal
+                state checks when sessions_async is false.
         """
         self.address = f"{host}:{port}"
         self.channel: Optional[grpc.Channel] = None
@@ -81,6 +113,32 @@ class BridgeExecutionClient:
         self.sandbox_definition_id = (
             sandbox_definition_id or os.getenv(_SANDBOX_DEFINITION_ID_ENV_VAR, "")
         ).strip()
+        self.sessions_async = bool(sessions_async) if sessions_async is not None else False
+        self.sessions_wait_timeout_seconds = (
+            float(sessions_wait_timeout_seconds)
+            if sessions_wait_timeout_seconds is not None
+            else 600.0
+        )
+        self.sessions_poll_interval_seconds = (
+            float(sessions_poll_interval_seconds)
+            if sessions_poll_interval_seconds is not None
+            else 1.0
+        )
+        if self.agent_transport == "sessions":
+            if sessions_async is None:
+                self.sessions_async = _env_bool(_SESSIONS_ASYNC_ENV_VAR, False)
+            if sessions_wait_timeout_seconds is None:
+                self.sessions_wait_timeout_seconds = _env_float(
+                    _SESSIONS_WAIT_TIMEOUT_SECONDS_ENV_VAR, 600.0
+                )
+            if sessions_poll_interval_seconds is None:
+                self.sessions_poll_interval_seconds = _env_float(
+                    _SESSIONS_POLL_INTERVAL_SECONDS_ENV_VAR, 1.0
+                )
+        if self.sessions_wait_timeout_seconds <= 0:
+            raise ValueError("sessions_wait_timeout_seconds must be greater than 0")
+        if self.sessions_poll_interval_seconds <= 0:
+            raise ValueError("sessions_poll_interval_seconds must be greater than 0")
 
     def connect(self):
         """Establish connection to the Bridge service."""
@@ -196,7 +254,11 @@ class BridgeExecutionClient:
         session_id = response.get("id")
         if not isinstance(session_id, str) or not session_id:
             raise RuntimeError("sessions API did not return a valid session id")
-        return agent_name, session_id, "scheduled"
+        if self.sessions_async:
+            return agent_name, session_id, "scheduled"
+
+        terminal_state = self._wait_for_terminal_session_state(session_id)
+        return agent_name, session_id, self._exit_result_for_terminal_state(terminal_state)
 
     def _validate_sessions_config(self) -> None:
         if not self.api_base_url:
@@ -250,6 +312,35 @@ class BridgeExecutionClient:
             "previous_session_id": previous_session_id,
             "strategy": "no_compaction",
         }
+
+    def _wait_for_terminal_session_state(self, session_id: str) -> str:
+        deadline = time.monotonic() + self.sessions_wait_timeout_seconds
+        last_state = "unknown"
+
+        while True:
+            response = self._sessions_request_json("GET", f"/v0/sessions/{session_id}")
+            if not isinstance(response, dict):
+                raise RuntimeError("unexpected get-session response shape")
+
+            state = response.get("state")
+            if isinstance(state, str):
+                normalized_state = state.strip().lower()
+                if normalized_state:
+                    last_state = normalized_state
+                if normalized_state in _TERMINAL_SESSION_STATES:
+                    return normalized_state
+
+            now = time.monotonic()
+            if now >= deadline:
+                raise RuntimeError(
+                    f"timed out waiting for session {session_id} to reach terminal state "
+                    f"after {self.sessions_wait_timeout_seconds:.1f}s (last_state={last_state})"
+                )
+
+            time.sleep(min(self.sessions_poll_interval_seconds, deadline - now))
+
+    def _exit_result_for_terminal_state(self, state: str) -> str:
+        return "success" if state == "finished" else "failure"
 
     def _sessions_request_json(
         self,

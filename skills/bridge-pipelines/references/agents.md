@@ -28,6 +28,14 @@ with BridgeSidecarClient(host="localhost", port=50052) as client:
 
 **Returns:** `(agent_name, session_id, exit_result)`
 
+### Sessions Transport Notes
+
+When using sessions transport (`BRIDGE_SDK_AGENT_TRANSPORT=sessions`):
+- Default behavior waits for terminal session state and returns `"success"` or `"failure"`.
+- Set `BRIDGE_SDK_SESSIONS_ASYNC=true` to return immediately with `"scheduled"`.
+- `continue_from` requires `previous_session_id` to reference a terminal session.
+- `ContinueFrom.CompactionStrategy()` is not supported in sessions transport.
+
 ### Getting Agent Output
 
 `exit_result` is **not** the agent's work output — it's just a status/success message. To capture agent output, instruct the agent to write results to a file:
@@ -76,6 +84,8 @@ def followup_step(
 **Continuation strategies:**
 - `ContinueFrom.NoCompactionStrategy()` — preserve full context
 - `ContinueFrom.CompactionStrategy()` — compact context before continuing
+
+In sessions transport, only `NoCompactionStrategy()` is currently supported.
 
 ### Full Agent Pipeline Example
 

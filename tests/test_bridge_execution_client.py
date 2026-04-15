@@ -216,14 +216,26 @@ class TestStartAgentContentParts:
 
 
 class FakeSessionsBridgeClient(BridgeExecutionClient):
-    def __init__(self):
+    def __init__(
+        self,
+        *,
+        sessions_async: bool = False,
+        session_states: list[str] | None = None,
+        sessions_wait_timeout_seconds: float = 1.0,
+        sessions_poll_interval_seconds: float = 0.001,
+    ):
         super().__init__(
             agent_transport="sessions",
             api_base_url="https://api.example.com",
             api_token="token",
             sandbox_id="sandbox-123",
+            sessions_async=sessions_async,
+            sessions_wait_timeout_seconds=sessions_wait_timeout_seconds,
+            sessions_poll_interval_seconds=sessions_poll_interval_seconds,
         )
         self.calls: list[dict] = []
+        self._session_states = session_states or ["finished"]
+        self._session_state_idx = 0
 
     def _sessions_request_json(self, method, path, *, query=None, body=None):
         self.calls.append(
@@ -239,6 +251,10 @@ class FakeSessionsBridgeClient(BridgeExecutionClient):
             return [{"id": "agent-123", "name": "Malibu"}]
         if method == "POST" and path == "/v0/agents/agent-123/sessions":
             return {"id": "session-456"}
+        if method == "GET" and path == "/v0/sessions/session-456":
+            idx = min(self._session_state_idx, len(self._session_states) - 1)
+            self._session_state_idx += 1
+            return {"id": "session-456", "state": self._session_states[idx]}
         raise AssertionError(f"unexpected request: {method} {path}")
 
 
@@ -259,13 +275,19 @@ class TestStartAgentSessionsTransport:
 
         assert agent_name == "Malibu"
         assert session_id == "session-456"
-        assert exit_result == "scheduled"
+        assert exit_result == "success"
 
-        assert len(client.calls) == 2
+        assert len(client.calls) == 3
         assert client.calls[1]["body"] == {
             "type": "remote",
             "prompt": "say hello",
             "sandbox_id": "sandbox-123",
+        }
+        assert client.calls[2] == {
+            "method": "GET",
+            "path": "/v0/sessions/session-456",
+            "query": None,
+            "body": None,
         }
 
     def test_maps_continue_from_no_compaction(self):
@@ -283,11 +305,49 @@ class TestStartAgentSessionsTransport:
             continue_from=continue_from,
         )
 
-        assert len(client.calls) == 2
+        assert len(client.calls) == 3
         assert client.calls[1]["body"]["continue_from"] == {
             "previous_session_id": "previous-session-1",
             "strategy": "no_compaction",
         }
+
+    def test_async_mode_returns_scheduled_without_waiting(self):
+        client = FakeSessionsBridgeClient(sessions_async=True)
+        _, _, exit_result = client.start_agent(
+            prompt="say hello",
+            agent_name="Malibu",
+        )
+
+        assert exit_result == "scheduled"
+        assert len(client.calls) == 2
+
+    def test_returns_failure_when_terminal_state_is_failed(self):
+        client = FakeSessionsBridgeClient(
+            session_states=["starting", "running", "failed"]
+        )
+        _, _, exit_result = client.start_agent(
+            prompt="say hello",
+            agent_name="Malibu",
+        )
+
+        assert exit_result == "failure"
+        assert [c["path"] for c in client.calls[2:]] == [
+            "/v0/sessions/session-456",
+            "/v0/sessions/session-456",
+            "/v0/sessions/session-456",
+        ]
+
+    def test_wait_timeout_raises(self):
+        client = FakeSessionsBridgeClient(
+            session_states=["starting"],
+            sessions_wait_timeout_seconds=0.01,
+            sessions_poll_interval_seconds=0.005,
+        )
+        with pytest.raises(RuntimeError, match="timed out waiting for session"):
+            client.start_agent(
+                prompt="say hello",
+                agent_name="Malibu",
+            )
 
     def test_rejects_continue_from_compaction(self):
         continue_from = bridge_sidecar_pb2.ContinueFrom(
