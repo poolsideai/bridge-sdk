@@ -45,6 +45,11 @@ from .models import (
     to_proto_content_part,
 )
 
+from .bridge_execution_client import (
+    BridgeExecutionClient,
+    BridgeSidecarClient,
+)
+
 from .eval import bridge_eval
 
 from .eval_function import (
@@ -91,6 +96,8 @@ __all__ = [
     "TextContentPart",
     "WebhookPipelineAction",
     "to_proto_content_part",
+    "BridgeExecutionClient",
+    "BridgeSidecarClient",
     "bridge_eval",
     "EvalFunction",
     "EVAL_REGISTRY",

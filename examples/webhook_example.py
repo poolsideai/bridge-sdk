@@ -28,7 +28,7 @@ from typing import Annotated, Optional
 from pydantic import BaseModel
 
 from bridge_sdk import Pipeline, WebhookPipelineAction, step_result
-from bridge_sdk.bridge_sidecar_client import BridgeSidecarClient
+from bridge_sdk.bridge_execution_client import BridgeExecutionClient
 
 
 # =============================================================================
@@ -170,7 +170,7 @@ def triage_item(
     """
     item = from_issue or from_pr
     assert item is not None, "Expected at least one of from_issue or from_pr"
-    with BridgeSidecarClient() as client:
+    with BridgeExecutionClient() as client:
         _, session_id, res = client.start_agent(
             prompt=(
                 f"Triage the following item and respond with a priority "
