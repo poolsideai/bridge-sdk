@@ -35,6 +35,9 @@ _SANDBOX_DEFINITION_ID_ENV_VAR = "BRIDGE_SDK_SANDBOX_DEFINITION_ID"
 _SESSIONS_ASYNC_ENV_VAR = "BRIDGE_SDK_SESSIONS_ASYNC"
 _SESSIONS_WAIT_TIMEOUT_SECONDS_ENV_VAR = "BRIDGE_SDK_SESSIONS_WAIT_TIMEOUT_SECONDS"
 _SESSIONS_POLL_INTERVAL_SECONDS_ENV_VAR = "BRIDGE_SDK_SESSIONS_POLL_INTERVAL_SECONDS"
+_STEP_RUNTIME_API_BASE_URL_ENV_VAR = "BRIDGE_EXECUTION_API_BASE_URL"
+_STEP_RUNTIME_API_TOKEN_ENV_VAR = "BRIDGE_EXECUTION_API_TOKEN"
+_STEP_RUNTIME_SANDBOX_ID_ENV_VAR = "BRIDGE_EXECUTION_SANDBOX_ID"
 _TERMINAL_SESSION_STATES = {"finished", "failed", "cancelled", "canceled", "invalid"}
 
 
@@ -139,6 +142,51 @@ class BridgeExecutionClient:
             raise ValueError("sessions_wait_timeout_seconds must be greater than 0")
         if self.sessions_poll_interval_seconds <= 0:
             raise ValueError("sessions_poll_interval_seconds must be greater than 0")
+
+    @classmethod
+    def from_step_runtime(
+        cls,
+        *,
+        sessions_async: Optional[bool] = None,
+        sessions_wait_timeout_seconds: Optional[float] = None,
+        sessions_poll_interval_seconds: Optional[float] = None,
+    ) -> "BridgeExecutionClient":
+        """Construct a sessions client from Bridge step-runtime environment variables."""
+        api_base_url = (
+            os.getenv(_STEP_RUNTIME_API_BASE_URL_ENV_VAR)
+            or os.getenv(_API_BASE_URL_ENV_VAR, "")
+        ).strip()
+        api_token = (
+            os.getenv(_STEP_RUNTIME_API_TOKEN_ENV_VAR)
+            or os.getenv(_API_TOKEN_ENV_VAR, "")
+        ).strip()
+        sandbox_id = (
+            os.getenv(_STEP_RUNTIME_SANDBOX_ID_ENV_VAR)
+            or os.getenv(_SANDBOX_ID_ENV_VAR, "")
+        ).strip()
+
+        if not api_base_url:
+            raise RuntimeError(
+                f"missing {_STEP_RUNTIME_API_BASE_URL_ENV_VAR} in step runtime environment"
+            )
+        if not api_token:
+            raise RuntimeError(
+                f"missing {_STEP_RUNTIME_API_TOKEN_ENV_VAR} in step runtime environment"
+            )
+        if not sandbox_id:
+            raise RuntimeError(
+                f"missing {_STEP_RUNTIME_SANDBOX_ID_ENV_VAR} in step runtime environment"
+            )
+
+        return cls(
+            agent_transport="sessions",
+            api_base_url=api_base_url,
+            api_token=api_token,
+            sandbox_id=sandbox_id,
+            sessions_async=sessions_async,
+            sessions_wait_timeout_seconds=sessions_wait_timeout_seconds,
+            sessions_poll_interval_seconds=sessions_poll_interval_seconds,
+        )
 
     def connect(self):
         """Establish connection to the Bridge service."""

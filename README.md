@@ -570,6 +570,22 @@ with BridgeExecutionClient() as client:
 `BridgeExecutionClient` supports an opt-in sessions API path for `start_agent`.
 Default behavior remains sidecar gRPC.
 
+When running inside a Bridge pipeline step sandbox, prefer:
+
+```python
+from bridge_sdk.bridge_execution_client import BridgeExecutionClient
+
+with BridgeExecutionClient.from_step_runtime() as client:
+    _, session_id, result = client.start_agent(
+        prompt="Analyze this change",
+        agent_name="Malibu",
+    )
+```
+
+`from_step_runtime()` reads `BRIDGE_EXECUTION_API_BASE_URL`,
+`BRIDGE_EXECUTION_API_TOKEN`, and `BRIDGE_EXECUTION_SANDBOX_ID` (injected by the
+Bridge step runtime) and targets the current step sandbox directly via sessions API.
+
 Enable sessions transport by setting:
 
 ```bash

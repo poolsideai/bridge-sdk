@@ -259,6 +259,31 @@ class FakeSessionsBridgeClient(BridgeExecutionClient):
 
 
 class TestStartAgentSessionsTransport:
+    def test_from_step_runtime_reads_runtime_env(self, monkeypatch):
+        monkeypatch.setenv("BRIDGE_EXECUTION_API_BASE_URL", "https://chat.poolsi.de")
+        monkeypatch.setenv("BRIDGE_EXECUTION_API_TOKEN", "runtime-token")
+        monkeypatch.setenv("BRIDGE_EXECUTION_SANDBOX_ID", "sandbox-runtime")
+        monkeypatch.delenv("BRIDGE_SDK_SANDBOX_DEFINITION_ID", raising=False)
+
+        client = BridgeExecutionClient.from_step_runtime()
+
+        assert client.agent_transport == "sessions"
+        assert client.api_base_url == "https://chat.poolsi.de"
+        assert client.api_token == "runtime-token"
+        assert client.sandbox_id == "sandbox-runtime"
+        assert client.sandbox_definition_id == ""
+
+    def test_from_step_runtime_requires_runtime_env_values(self, monkeypatch):
+        monkeypatch.delenv("BRIDGE_EXECUTION_API_BASE_URL", raising=False)
+        monkeypatch.delenv("BRIDGE_EXECUTION_API_TOKEN", raising=False)
+        monkeypatch.delenv("BRIDGE_EXECUTION_SANDBOX_ID", raising=False)
+        monkeypatch.delenv("BRIDGE_SDK_API_BASE_URL", raising=False)
+        monkeypatch.delenv("BRIDGE_SDK_API_TOKEN", raising=False)
+        monkeypatch.delenv("BRIDGE_SDK_SANDBOX_ID", raising=False)
+
+        with pytest.raises(RuntimeError, match="BRIDGE_EXECUTION_API_BASE_URL"):
+            BridgeExecutionClient.from_step_runtime()
+
     def test_requires_sessions_config(self):
         client = BridgeExecutionClient(agent_transport="sessions")
         with pytest.raises(
