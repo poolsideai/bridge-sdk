@@ -260,7 +260,6 @@ class FakeSessionsBridgeClient(BridgeExecutionClient):
 
 class TestStartAgentSessionsTransport:
     def test_from_step_runtime_reads_runtime_env(self, monkeypatch):
-        monkeypatch.setenv("BRIDGE_EXECUTION_TRANSPORT", "sessions")
         monkeypatch.setenv("BRIDGE_EXECUTION_API_BASE_URL", "https://chat.poolsi.de")
         monkeypatch.setenv("BRIDGE_EXECUTION_API_TOKEN", "runtime-token")
         monkeypatch.setenv("BRIDGE_EXECUTION_SANDBOX_ID", "sandbox-runtime")
@@ -283,11 +282,6 @@ class TestStartAgentSessionsTransport:
         monkeypatch.delenv("BRIDGE_SDK_SANDBOX_ID", raising=False)
 
         with pytest.raises(RuntimeError, match="BRIDGE_EXECUTION_API_BASE_URL"):
-            BridgeExecutionClient.from_step_runtime()
-
-    def test_from_step_runtime_rejects_non_sessions_transport(self, monkeypatch):
-        monkeypatch.setenv("BRIDGE_EXECUTION_TRANSPORT", "sidecar")
-        with pytest.raises(ValueError, match="BRIDGE_EXECUTION_TRANSPORT"):
             BridgeExecutionClient.from_step_runtime()
 
     def test_requires_sessions_config(self):

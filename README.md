@@ -582,8 +582,9 @@ with BridgeExecutionClient.from_step_runtime() as client:
     )
 ```
 
-`from_step_runtime()` reads `BRIDGE_EXECUTION_*` env vars injected by the Bridge
-step runtime and targets the current step sandbox directly via sessions API.
+`from_step_runtime()` reads `BRIDGE_EXECUTION_API_BASE_URL`,
+`BRIDGE_EXECUTION_API_TOKEN`, and `BRIDGE_EXECUTION_SANDBOX_ID` (injected by the
+Bridge step runtime) and targets the current step sandbox directly via sessions API.
 
 Enable sessions transport by setting:
 

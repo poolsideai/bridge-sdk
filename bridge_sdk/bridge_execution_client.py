@@ -35,7 +35,6 @@ _SANDBOX_DEFINITION_ID_ENV_VAR = "BRIDGE_SDK_SANDBOX_DEFINITION_ID"
 _SESSIONS_ASYNC_ENV_VAR = "BRIDGE_SDK_SESSIONS_ASYNC"
 _SESSIONS_WAIT_TIMEOUT_SECONDS_ENV_VAR = "BRIDGE_SDK_SESSIONS_WAIT_TIMEOUT_SECONDS"
 _SESSIONS_POLL_INTERVAL_SECONDS_ENV_VAR = "BRIDGE_SDK_SESSIONS_POLL_INTERVAL_SECONDS"
-_STEP_RUNTIME_TRANSPORT_ENV_VAR = "BRIDGE_EXECUTION_TRANSPORT"
 _STEP_RUNTIME_API_BASE_URL_ENV_VAR = "BRIDGE_EXECUTION_API_BASE_URL"
 _STEP_RUNTIME_API_TOKEN_ENV_VAR = "BRIDGE_EXECUTION_API_TOKEN"
 _STEP_RUNTIME_SANDBOX_ID_ENV_VAR = "BRIDGE_EXECUTION_SANDBOX_ID"
@@ -153,12 +152,6 @@ class BridgeExecutionClient:
         sessions_poll_interval_seconds: Optional[float] = None,
     ) -> "BridgeExecutionClient":
         """Construct a sessions client from Bridge step-runtime environment variables."""
-        transport = os.getenv(_STEP_RUNTIME_TRANSPORT_ENV_VAR, "sessions").strip().lower()
-        if transport != "sessions":
-            raise ValueError(
-                f"unsupported {_STEP_RUNTIME_TRANSPORT_ENV_VAR}={transport!r}; expected 'sessions'"
-            )
-
         api_base_url = (
             os.getenv(_STEP_RUNTIME_API_BASE_URL_ENV_VAR)
             or os.getenv(_API_BASE_URL_ENV_VAR, "")
