@@ -229,6 +229,7 @@ class FakeSessionsBridgeClient(BridgeExecutionClient):
             api_base_url="https://api.example.com",
             api_token="token",
             sandbox_id="sandbox-123",
+            step_run_id="11111111-1111-1111-1111-111111111111",
             sessions_async=sessions_async,
             sessions_wait_timeout_seconds=sessions_wait_timeout_seconds,
             sessions_poll_interval_seconds=sessions_poll_interval_seconds,
@@ -263,6 +264,7 @@ class TestStartAgentSessionsTransport:
         monkeypatch.setenv("BRIDGE_EXECUTION_API_BASE_URL", "https://chat.poolsi.de")
         monkeypatch.setenv("BRIDGE_EXECUTION_API_TOKEN", "runtime-token")
         monkeypatch.setenv("BRIDGE_EXECUTION_SANDBOX_ID", "sandbox-runtime")
+        monkeypatch.setenv("BRIDGE_EXECUTION_STEP_RUN_ID", "22222222-2222-2222-2222-222222222222")
         monkeypatch.delenv("BRIDGE_SDK_SANDBOX_DEFINITION_ID", raising=False)
 
         client = BridgeExecutionClient.from_step_runtime()
@@ -271,12 +273,14 @@ class TestStartAgentSessionsTransport:
         assert client.api_base_url == "https://chat.poolsi.de"
         assert client.api_token == "runtime-token"
         assert client.sandbox_id == "sandbox-runtime"
+        assert client.step_run_id == "22222222-2222-2222-2222-222222222222"
         assert client.sandbox_definition_id == ""
 
     def test_from_step_runtime_requires_runtime_env_values(self, monkeypatch):
         monkeypatch.delenv("BRIDGE_EXECUTION_API_BASE_URL", raising=False)
         monkeypatch.delenv("BRIDGE_EXECUTION_API_TOKEN", raising=False)
         monkeypatch.delenv("BRIDGE_EXECUTION_SANDBOX_ID", raising=False)
+        monkeypatch.delenv("BRIDGE_EXECUTION_STEP_RUN_ID", raising=False)
         monkeypatch.delenv("BRIDGE_SDK_API_BASE_URL", raising=False)
         monkeypatch.delenv("BRIDGE_SDK_API_TOKEN", raising=False)
         monkeypatch.delenv("BRIDGE_SDK_SANDBOX_ID", raising=False)
@@ -307,6 +311,13 @@ class TestStartAgentSessionsTransport:
             "type": "remote",
             "prompt": "say hello",
             "sandbox_id": "sandbox-123",
+            "session_associations": [
+                {
+                    "relationship": "produced_in",
+                    "resource_type": "BridgePipelineStepRun",
+                    "resource_id": "11111111-1111-1111-1111-111111111111",
+                }
+            ],
         }
         assert client.calls[2] == {
             "method": "GET",
@@ -404,6 +415,16 @@ class TestStartAgentSessionsTransport:
                 agent_name="Malibu",
                 directory="/tmp/work",
             )
+
+    def test_requires_step_run_id_when_using_sandbox_id(self):
+        client = BridgeExecutionClient(
+            agent_transport="sessions",
+            api_base_url="https://api.example.com",
+            api_token="token",
+            sandbox_id="sandbox-123",
+        )
+        with pytest.raises(RuntimeError, match="requires step_run_id"):
+            client.start_agent(prompt="say hello", agent_name="Malibu")
 
 
 def test_bridge_sidecar_client_shim_warns_and_reexports():

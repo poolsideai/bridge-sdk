@@ -19,6 +19,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 
 import grpc
 from typing import Any, Optional
@@ -38,6 +39,7 @@ _SESSIONS_POLL_INTERVAL_SECONDS_ENV_VAR = "BRIDGE_SDK_SESSIONS_POLL_INTERVAL_SEC
 _STEP_RUNTIME_API_BASE_URL_ENV_VAR = "BRIDGE_EXECUTION_API_BASE_URL"
 _STEP_RUNTIME_API_TOKEN_ENV_VAR = "BRIDGE_EXECUTION_API_TOKEN"
 _STEP_RUNTIME_SANDBOX_ID_ENV_VAR = "BRIDGE_EXECUTION_SANDBOX_ID"
+_STEP_RUNTIME_STEP_RUN_ID_ENV_VAR = "BRIDGE_EXECUTION_STEP_RUN_ID"
 _TERMINAL_SESSION_STATES = {"finished", "failed", "cancelled", "canceled", "invalid"}
 
 
@@ -72,6 +74,7 @@ class BridgeExecutionClient:
         api_token: Optional[str] = None,
         sandbox_id: Optional[str] = None,
         sandbox_definition_id: Optional[str] = None,
+        step_run_id: Optional[str] = None,
         sessions_async: Optional[bool] = None,
         sessions_wait_timeout_seconds: Optional[float] = None,
         sessions_poll_interval_seconds: Optional[float] = None,
@@ -88,6 +91,8 @@ class BridgeExecutionClient:
             api_token: Core API bearer token for sessions transport.
             sandbox_id: Existing sandbox ID for sessions transport.
             sandbox_definition_id: Sandbox definition ID for sessions transport.
+            step_run_id: Bridge pipeline step run UUID used for sandbox placement
+                association when sandbox_id is provided.
             sessions_async: When true, sessions transport returns immediately after
                 session scheduling. When false, waits for the session to reach a
                 terminal state before returning.
@@ -116,6 +121,7 @@ class BridgeExecutionClient:
         self.sandbox_definition_id = (
             sandbox_definition_id or os.getenv(_SANDBOX_DEFINITION_ID_ENV_VAR, "")
         ).strip()
+        self.step_run_id = (step_run_id or "").strip()
         self.sessions_async = bool(sessions_async) if sessions_async is not None else False
         self.sessions_wait_timeout_seconds = (
             float(sessions_wait_timeout_seconds)
@@ -164,6 +170,7 @@ class BridgeExecutionClient:
             os.getenv(_STEP_RUNTIME_SANDBOX_ID_ENV_VAR)
             or os.getenv(_SANDBOX_ID_ENV_VAR, "")
         ).strip()
+        step_run_id = os.getenv(_STEP_RUNTIME_STEP_RUN_ID_ENV_VAR, "").strip()
 
         if not api_base_url:
             raise RuntimeError(
@@ -177,12 +184,17 @@ class BridgeExecutionClient:
             raise RuntimeError(
                 f"missing {_STEP_RUNTIME_SANDBOX_ID_ENV_VAR} in step runtime environment"
             )
+        if not step_run_id:
+            raise RuntimeError(
+                f"missing {_STEP_RUNTIME_STEP_RUN_ID_ENV_VAR} in step runtime environment"
+            )
 
         return cls(
             agent_transport="sessions",
             api_base_url=api_base_url,
             api_token=api_token,
             sandbox_id=sandbox_id,
+            step_run_id=step_run_id,
             sessions_async=sessions_async,
             sessions_wait_timeout_seconds=sessions_wait_timeout_seconds,
             sessions_poll_interval_seconds=sessions_poll_interval_seconds,
@@ -282,6 +294,10 @@ class BridgeExecutionClient:
     ) -> tuple[str, str, str]:
         self._validate_sessions_config()
 
+        session_associations: list[dict[str, str]] | None = None
+        if self.sandbox_id:
+            session_associations = self._session_associations_for_step_run()
+
         agent_id = self._resolve_agent_id(agent_name)
         payload: dict[str, Any] = {
             "type": "remote",
@@ -289,6 +305,7 @@ class BridgeExecutionClient:
         }
         if self.sandbox_id:
             payload["sandbox_id"] = self.sandbox_id
+            payload["session_associations"] = session_associations
         if self.sandbox_definition_id:
             payload["sandbox_definition_id"] = self.sandbox_definition_id
         if continue_from is not None:
@@ -360,6 +377,26 @@ class BridgeExecutionClient:
             "previous_session_id": previous_session_id,
             "strategy": "no_compaction",
         }
+
+    def _session_associations_for_step_run(self) -> list[dict[str, str]]:
+        if not self.step_run_id:
+            raise RuntimeError(
+                "sessions transport with sandbox_id requires step_run_id (set BRIDGE_EXECUTION_STEP_RUN_ID in step runtime)"
+            )
+        try:
+            uuid.UUID(self.step_run_id)
+        except ValueError as err:
+            raise RuntimeError(
+                f"invalid step_run_id {self.step_run_id!r}; expected UUID"
+            ) from err
+
+        return [
+            {
+                "relationship": "produced_in",
+                "resource_type": "BridgePipelineStepRun",
+                "resource_id": self.step_run_id,
+            }
+        ]
 
     def _wait_for_terminal_session_state(self, session_id: str) -> str:
         deadline = time.monotonic() + self.sessions_wait_timeout_seconds
