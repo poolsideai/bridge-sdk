@@ -1,0 +1,270 @@
+# Copyright 2026 Poolside, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: "Console Repository Sync"
+description: "Sync git-backed Console repositories at a specific commit and poll until syncing finishes."
+author: "Poolside"
+
+branding:
+  icon: "refresh-cw"
+  color: "blue"
+
+inputs:
+  repository_id:
+    description: "The Console repository ID to target. When omitted, repositories matching the GitHub remote are discovered automatically."
+    required: false
+    default: ""
+  token:
+    description: "Bearer token for Poolside API authentication."
+    required: true
+  api_base_url:
+    description: "Base URL for the Poolside API."
+    required: true
+  commit_sha:
+    description: "Git commit SHA. Defaults to the HEAD commit of the triggering workflow."
+    required: false
+    default: ""
+  poll_interval:
+    description: "Seconds between status polls."
+    required: false
+    default: "5"
+  poll_timeout:
+    description: "Maximum seconds to wait for repository sync to complete."
+    required: false
+    default: "300"
+
+outputs:
+  version_ids:
+    description: "Comma-separated Console repository version IDs created or reused by the sync."
+    value: ${{ steps.sync.outputs.version_ids }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Sync Console repository
+      id: sync
+      shell: bash
+      env:
+        INPUT_REPOSITORY_ID: ${{ inputs.repository_id }}
+        INPUT_TOKEN: ${{ inputs.token }}
+        INPUT_API_BASE_URL: ${{ inputs.api_base_url }}
+        INPUT_COMMIT_SHA: ${{ inputs.commit_sha }}
+        INPUT_POLL_INTERVAL: ${{ inputs.poll_interval }}
+        INPUT_POLL_TIMEOUT: ${{ inputs.poll_timeout }}
+        GH_REPOSITORY: ${{ github.repository }}
+        GH_SHA: ${{ github.sha }}
+      run: |
+        set -euo pipefail
+
+        SHA="${INPUT_COMMIT_SHA:-$GH_SHA}"
+        TARGET_REMOTE="https://github.com/${GH_REPOSITORY}"
+
+        echo "::add-mask::${INPUT_TOKEN}"
+
+        normalize_remote() {
+          local remote="$1"
+          if [[ "$remote" == git@github.com:* ]]; then
+            remote="https://github.com/${remote#git@github.com:}"
+          elif [[ "$remote" == ssh://git@github.com/* ]]; then
+            remote="https://github.com/${remote#ssh://git@github.com/}"
+          fi
+          remote="${remote%.git}"
+          echo "$remote"
+        }
+
+        extract_repositories() {
+          jq -r '
+            def repositories:
+              if type == "array" then .[]
+              elif type == "object" then (.repositories? // .items? // .data? // [])[]
+              else empty
+              end;
+            repositories |
+            [
+              (.id // .repository_id // ""),
+              (.remote_url // .latest_version_info.remote_url // .latest_version_info.metadata.remote_url // .metadata.remote_url // "")
+            ] |
+            @tsv
+          ' "$1"
+        }
+
+        extract_remote_url() {
+          jq -r '
+            .remote_url
+            // .latest_version_info.remote_url
+            // .latest_version_info.metadata.remote_url
+            // .latest_version.metadata.remote_url
+            // .metadata.remote_url
+            // ""
+          ' "$1"
+        }
+
+        get_repository() {
+          local repository_id="$1"
+          local output_file="$2"
+          curl --silent --output "$output_file" --write-out "%{http_code}" \
+            -X GET \
+            "${INPUT_API_BASE_URL}/v0/repositories/${repository_id}" \
+            -H "accept: application/json" \
+            -H "Authorization: Bearer ${INPUT_TOKEN}"
+        }
+
+        TARGET_REMOTE="$(normalize_remote "$TARGET_REMOTE")"
+        TARGET_IDS=()
+
+        if [ -n "$INPUT_REPOSITORY_ID" ]; then
+          TARGET_IDS+=("$INPUT_REPOSITORY_ID")
+          echo "Syncing explicit repository ${INPUT_REPOSITORY_ID} at commit ${SHA}"
+        else
+          echo "Discovering Console repositories for ${TARGET_REMOTE}"
+
+          LIST_CODE=$(curl --silent --output repositories_response.txt --write-out "%{http_code}" \
+            -X GET \
+            "${INPUT_API_BASE_URL}/v0/repositories" \
+            -H "accept: application/json" \
+            -H "Authorization: Bearer ${INPUT_TOKEN}")
+
+          if [ "$LIST_CODE" -lt 200 ] || [ "$LIST_CODE" -ge 300 ]; then
+            echo "::error::Repository discovery failed with HTTP ${LIST_CODE}"
+            cat repositories_response.txt
+            rm -f repositories_response.txt
+            exit 1
+          fi
+
+          while IFS=$'\t' read -r REPOSITORY_ID REMOTE_URL; do
+            if [ -z "$REPOSITORY_ID" ]; then
+              continue
+            fi
+
+            if [ -z "$REMOTE_URL" ] || [ "$REMOTE_URL" = "null" ]; then
+              DETAIL_CODE=$(get_repository "$REPOSITORY_ID" repository_detail.txt)
+              if [ "$DETAIL_CODE" -lt 200 ] || [ "$DETAIL_CODE" -ge 300 ]; then
+                echo "::error::Repository ${REPOSITORY_ID} lookup failed with HTTP ${DETAIL_CODE} during auto-discovery"
+                cat repository_detail.txt
+                rm -f repository_detail.txt repositories_response.txt
+                exit 1
+              fi
+              REMOTE_URL=$(extract_remote_url repository_detail.txt)
+              rm -f repository_detail.txt
+            fi
+
+            NORMALIZED_REMOTE="$(normalize_remote "$REMOTE_URL")"
+            if [ "$NORMALIZED_REMOTE" = "$TARGET_REMOTE" ]; then
+              TARGET_IDS+=("$REPOSITORY_ID")
+            fi
+          done < <(extract_repositories repositories_response.txt)
+          rm -f repositories_response.txt
+
+          if [ "${#TARGET_IDS[@]}" -eq 0 ]; then
+            echo "::error::No Console repositories matched ${TARGET_REMOTE}. Register this GitHub repository as a git-backed Console repository, or pass repository_id explicitly."
+            exit 1
+          fi
+
+          echo "Discovered ${#TARGET_IDS[@]} matching Console repository/repositories"
+        fi
+
+        VERSION_IDS=()
+
+        sync_repository() {
+          local repository_id="$1"
+          local elapsed=0
+
+          echo "Syncing repository ${repository_id} at commit ${SHA}"
+
+          PAYLOAD=$(jq -n --arg sha "$SHA" '{commit_sha: $sha}')
+
+          HTTP_CODE=$(curl --silent --output sync_response.txt --write-out "%{http_code}" \
+            -X POST \
+            "${INPUT_API_BASE_URL}/v0/repositories/${repository_id}/sync" \
+            -H "accept: application/json" \
+            -H "Authorization: Bearer ${INPUT_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD")
+
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            echo "::error::Repository sync failed with HTTP ${HTTP_CODE}"
+            cat sync_response.txt
+            rm -f sync_response.txt
+            exit 1
+          fi
+
+          VERSION_ID=$(jq -r '.version_id // empty' sync_response.txt)
+          REUSED=$(jq -r '.reused // false' sync_response.txt)
+          rm -f sync_response.txt
+
+          if [ -z "$VERSION_ID" ] || [ "$VERSION_ID" = "null" ]; then
+            echo "::error::Failed to extract version ID from sync response"
+            exit 1
+          fi
+
+          VERSION_IDS+=("$VERSION_ID")
+
+          if [ "$REUSED" = "true" ]; then
+            echo "commit already synced (version ${VERSION_ID})"
+            return 0
+          fi
+
+          echo "Repository sync started (version ${VERSION_ID})"
+          echo "Polling for version ${VERSION_ID} to finish syncing..."
+
+          while true; do
+            sleep "${INPUT_POLL_INTERVAL}"
+            elapsed=$((elapsed + INPUT_POLL_INTERVAL))
+
+            POLL_CODE=$(get_repository "$repository_id" poll_response.txt)
+
+            if [ "$POLL_CODE" -lt 200 ] || [ "$POLL_CODE" -ge 300 ]; then
+              echo "::error::Status poll failed with HTTP ${POLL_CODE}"
+              cat poll_response.txt
+              rm -f poll_response.txt
+              exit 1
+            fi
+
+            LATEST_VERSION_ID=$(jq -r '.latest_version_info.version_id // .latest_version_info.id // empty' poll_response.txt)
+            STATE=$(jq -r '.latest_version_info.state // empty' poll_response.txt)
+            ERROR_DESC=$(jq -r '.latest_version_info.error // .latest_version_info.status_description // empty' poll_response.txt)
+            rm -f poll_response.txt
+
+            if [ "$LATEST_VERSION_ID" != "$VERSION_ID" ]; then
+              echo "superseded by newer sync"
+              return 0
+            fi
+
+            echo "State: ${STATE} (${elapsed}s elapsed)${ERROR_DESC:+ — ${ERROR_DESC}}"
+
+            case "$STATE" in
+              ready)
+                echo "Repository sync finished successfully"
+                return 0
+                ;;
+              error)
+                echo "::error::Repository sync failed: ${ERROR_DESC}"
+                exit 1
+                ;;
+            esac
+
+            if [ "$elapsed" -ge "${INPUT_POLL_TIMEOUT}" ]; then
+              echo "::error::Timed out after ${INPUT_POLL_TIMEOUT}s waiting for repository sync (last state: ${STATE})"
+              exit 1
+            fi
+          done
+        }
+
+        for TARGET_ID in "${TARGET_IDS[@]}"; do
+          sync_repository "$TARGET_ID"
+        done
+
+        VERSION_IDS_OUTPUT=$(IFS=,; echo "${VERSION_IDS[*]}")
+        echo "version_ids=${VERSION_IDS_OUTPUT}"
+        echo "version_ids=${VERSION_IDS_OUTPUT}" >> "$GITHUB_OUTPUT"
