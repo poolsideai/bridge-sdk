@@ -103,6 +103,17 @@ class WebhookPipelineAction(BaseModel):
             Available variables: same as ``on``.
         webhook_endpoint: Name of the webhook endpoint configured in Console
             (e.g. ``"linear_issues"``).
+        idempotency_key: Optional CEL expression that produces a deterministic
+            key for this action invocation. When set, repeated webhook deliveries
+            that evaluate to the same key will be deduplicated according to the
+            ``conflict_policy``. Must return a string.
+            Available variables: same as ``on``.
+        conflict_policy: Controls behavior when a workflow with the same
+            idempotency key is already running. Only meaningful when
+            ``idempotency_key`` is set.
+            - ``"terminate_existing"``: Cancel the running workflow and start new.
+            - ``"use_existing"``: Keep the running workflow, drop this invocation.
+            - ``"fail"``: Reject this invocation if a workflow is already running.
 
     Example::
 
@@ -137,6 +148,12 @@ class WebhookPipelineAction(BaseModel):
     webhook_endpoint: str
     """Name of the webhook endpoint configured in Console."""
 
+    idempotency_key: Optional[str] = None
+    """Optional CEL expression producing a deterministic key for deduplication. Must return a string."""
+
+    conflict_policy: Optional[Literal["terminate_existing", "use_existing", "fail"]] = None
+    """Conflict policy when a workflow with the same idempotency key is already running."""
+
     @model_validator(mode="after")
     def _validate_cel_expressions(self) -> "WebhookPipelineAction":
         env = CelEnvironment(annotations={
@@ -150,6 +167,13 @@ class WebhookPipelineAction(BaseModel):
             except Exception as e:
                 raise ValueError(
                     f"Invalid CEL expression in '{field_name}': {e}"
+                ) from e
+        if self.idempotency_key is not None:
+            try:
+                env.compile(self.idempotency_key)
+            except Exception as e:
+                raise ValueError(
+                    f"Invalid CEL expression in 'idempotency_key': {e}"
                 ) from e
         return self
 

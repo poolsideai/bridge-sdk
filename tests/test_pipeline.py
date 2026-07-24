@@ -697,7 +697,8 @@ class TestPipelineWebhookPipelineActions:
         assert dumped["webhook_endpoint"] == "stripe_invoices"
         assert dumped["on"] == 'body_json.type == "invoice.paid"'
         assert "provider" not in dumped
-        assert "idempotency_key" not in dumped
+        assert dumped["idempotency_key"] is None
+        assert dumped["conflict_policy"] is None
         assert "filter" not in dumped
 
         parsed = json.loads(json.dumps(dumped))
@@ -934,6 +935,114 @@ class TestPipelineWebhookPipelineActions:
                 transform='{"unclosed: map',
                 webhook_endpoint="ep",
             )
+
+    def test_webhook_with_idempotency_key(self) -> None:
+        """Test WebhookPipelineAction with idempotency_key and conflict_policy."""
+        wh = WebhookPipelineAction(
+            name="idempotent-hook",
+            branch="main",
+            on='body_json.action == "opened"',
+            transform='{"review_step": {"pr_number": body_json.number}}',
+            webhook_endpoint="github_prs",
+            idempotency_key='string(body_json.number)',
+            conflict_policy="terminate_existing",
+        )
+        assert wh.idempotency_key == 'string(body_json.number)'
+        assert wh.conflict_policy == "terminate_existing"
+
+        dumped = wh.model_dump()
+        assert dumped["idempotency_key"] == 'string(body_json.number)'
+        assert dumped["conflict_policy"] == "terminate_existing"
+
+    def test_webhook_idempotency_key_none_excluded_with_exclude_none(self) -> None:
+        """Test that idempotency_key is excluded from model_dump(exclude_none=True) when not set."""
+        wh = WebhookPipelineAction(
+            name="no-idem",
+            branch="main",
+            on="true",
+            transform='{"s": {}}',
+            webhook_endpoint="ep",
+        )
+        dumped = wh.model_dump(exclude_none=True)
+        assert "idempotency_key" not in dumped
+        assert "conflict_policy" not in dumped
+
+    def test_webhook_invalid_idempotency_key_cel(self) -> None:
+        """Test that an invalid CEL expression in idempotency_key raises ValidationError."""
+        with pytest.raises(ValueError, match="Invalid CEL expression in 'idempotency_key'"):
+            WebhookPipelineAction(
+                name="bad-idem",
+                branch="main",
+                on="true",
+                transform='{"s": {}}',
+                webhook_endpoint="ep",
+                idempotency_key="invalid%%cel(((",
+            )
+
+    def test_webhook_invalid_conflict_policy(self) -> None:
+        """Test that an invalid conflict_policy raises ValidationError."""
+        with pytest.raises(Exception):
+            WebhookPipelineAction(
+                name="bad-policy",
+                branch="main",
+                on="true",
+                transform='{"s": {}}',
+                webhook_endpoint="ep",
+                conflict_policy="invalid_value",
+            )
+
+    def test_webhook_conflict_policy_without_idempotency_key(self) -> None:
+        """Test that conflict_policy can be set without idempotency_key (no error)."""
+        wh = WebhookPipelineAction(
+            name="policy-only",
+            branch="main",
+            on="true",
+            transform='{"s": {}}',
+            webhook_endpoint="ep",
+            conflict_policy="fail",
+        )
+        assert wh.conflict_policy == "fail"
+        assert wh.idempotency_key is None
+
+    def test_webhook_pipeline_data_serialization_with_idempotency(self) -> None:
+        """Test that PipelineData serialization includes idempotency fields on webhooks."""
+        webhooks = [
+            WebhookPipelineAction(
+                name="idem-hook",
+                branch="main",
+                on='body_json.action == "push"',
+                transform='{"build_step": {"ref": body_json.ref}}',
+                webhook_endpoint="github_pushes",
+                idempotency_key='body_json.ref',
+                conflict_policy="use_existing",
+            ),
+        ]
+        data = PipelineData(
+            name="idem_pipeline",
+            webhooks=webhooks,
+        )
+        dumped = data.model_dump()
+        wh_data = dumped["webhooks"][0]
+        assert wh_data["idempotency_key"] == 'body_json.ref'
+        assert wh_data["conflict_policy"] == "use_existing"
+
+        # JSON round-trip
+        parsed = json.loads(json.dumps(dumped))
+        assert parsed["webhooks"][0]["idempotency_key"] == 'body_json.ref'
+        assert parsed["webhooks"][0]["conflict_policy"] == "use_existing"
+
+    def test_webhook_all_conflict_policies(self) -> None:
+        """Test all valid conflict_policy values."""
+        for policy in ["terminate_existing", "use_existing", "fail"]:
+            wh = WebhookPipelineAction(
+                name=f"policy-{policy}",
+                branch="main",
+                on="true",
+                transform='{"s": {}}',
+                webhook_endpoint="ep",
+                conflict_policy=policy,
+            )
+            assert wh.conflict_policy == policy
 
 
 if __name__ == "__main__":
